@@ -1,0 +1,26 @@
+name: Continuous Integration
+run-name: CI on ${{ github.ref }}
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Fail CI on any warnings
+  RUSTFLAGS: "-Dwarnings"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v3
+      # Runner's default (stable) rustc is fine
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run lints (Clippy)
+        run: cargo clippy --all-targets --all-features
+      - name: Run tests
+        run: cargo test --all-features
