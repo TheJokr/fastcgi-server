@@ -1,3 +1,4 @@
+doc-valid-idents = ["FastCGI", ".."]
 allow-expect-in-tests = true
 allow-unwrap-in-tests = true
 allow-dbg-in-tests = true

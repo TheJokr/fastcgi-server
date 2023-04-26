@@ -11,3 +11,5 @@ keywords = ["fastcgi", "protocol", "backend", "web"]
 categories = ["network-programming", "web-programming"]
 
 [dependencies]
+thiserror = "1.0"
+bitflags = "2.0"
