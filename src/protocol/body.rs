@@ -92,3 +92,64 @@ impl EndRequest {
         buf
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unknown_roundtrip() {
+        for rtype in [0, 1, 17, 51, 192, 246, u8::MAX] {
+            let orig = UnknownType { rtype };
+            let rt = UnknownType::from_bytes(orig.to_bytes());
+            assert_eq!(orig.rtype, rt.rtype);
+        }
+    }
+
+    #[test]
+    fn beginrequest_roundtrip() -> Result<(), ProtocolError> {
+        use Role::*;
+        for role in [Responder, Authorizer, Filter] {
+            for flags in [RequestFlags::empty(), RequestFlags::KeepConn] {
+                let orig = BeginRequest { role, flags };
+                let rt = BeginRequest::from_bytes(orig.to_bytes())?;
+                assert_eq!(orig.role, rt.role);
+                assert_eq!(orig.flags.bits(), rt.flags.bits());
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn endrequest_roundtrip() -> Result<(), ProtocolError> {
+        use ProtocolStatus::*;
+        for protocol_status in [RequestComplete, CantMpxConn, Overloaded, UnknownRole] {
+            for app_status in [0, 1, 178, 28825, 86828, 0xaf89ef93, u32::MAX] {
+                let orig = EndRequest { app_status, protocol_status };
+                let rt = EndRequest::from_bytes(orig.to_bytes())?;
+                assert_eq!(orig.app_status, rt.app_status);
+                assert_eq!(orig.protocol_status, rt.protocol_status);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn beginrequest_invalid() {
+        const BAD_ROLE: [u8; 8] = [0xa3, 0x03, 0x00, 0xf1, 0x34, 0x51, 0xb2, 0x19];
+        let bad_role = BeginRequest::from_bytes(BAD_ROLE);
+        assert!(matches!(bad_role, Err(ProtocolError::UnknownRole(0xa303))));
+
+        const BAD_FLAGS: [u8; 8] = [0x00, 0x01, 0xf7, 0x65, 0x5c, 0x91, 0x2d, 0x00];
+        let bad_flags = BeginRequest::from_bytes(BAD_FLAGS);
+        assert!(matches!(bad_flags, Err(ProtocolError::UnknownFlags(0xf6))));
+    }
+
+    #[test]
+    fn endrequest_invalid() {
+        const BAD_STATUS: [u8; 8] = [0xbf, 0x23, 0x4d, 0x4d, 0x6a, 0x03, 0xc1, 0x0f];
+        let bad_status = EndRequest::from_bytes(BAD_STATUS);
+        assert!(matches!(bad_status, Err(ProtocolError::UnknownStatus(0x6a))));
+    }
+}
