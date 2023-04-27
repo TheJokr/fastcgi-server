@@ -34,7 +34,7 @@ impl<'a> Iterator for NVIter<'a> {
         let mut cur = self.data;
         let name_len = VarInt::read(&mut cur).ok()?.to_usize();
         let val_len = VarInt::read(&mut cur).ok()?.to_usize();
-        let total_len = name_len + val_len;
+        let total_len = name_len.saturating_add(val_len);
 
         if cur.len() >= total_len {
             self.data = &cur[total_len..];
