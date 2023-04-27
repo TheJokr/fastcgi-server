@@ -120,3 +120,63 @@ impl fmt::Display for VarInt {
         fmt::Display::fmt(&self.0, f)
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn convert() {
+        let ok = VarInt::try_from(378u32);
+        assert!(matches!(ok, Ok(VarInt(378))));
+        let ok = VarInt::try_from(45828usize);
+        assert!(matches!(ok, Ok(VarInt(45828))));
+
+        let fail = VarInt::try_from(u32::MAX);
+        assert!(matches!(fail, Err(ProtocolError::InvalidVarInt)));
+        if usize::try_from(u32::MAX).is_ok() {
+            // usize::MAX >= u32::MAX
+            let fail = VarInt::try_from(usize::MAX);
+            assert!(matches!(fail, Err(ProtocolError::InvalidVarInt)));
+        }
+
+        if usize::try_from(VarInt::MAX.0).is_err() {
+            // usize::MAX < VarInt::MAX
+            assert_eq!(VarInt::MAX.to_usize(), usize::MAX);
+        }
+    }
+
+    #[test]
+    fn roundtrip() -> io::Result<()> {
+        for v in [0, 1, 62, 127, 178, 251, 496, 6819, 92765, 8683895, VarInt::MAX.0] {
+            let orig = VarInt(v);
+            let mut buf = [0; 4];
+            let len = orig.write(&mut buf[..])?;
+            let rt = VarInt::read(&buf[..len])?;
+            assert_eq!(orig, rt);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn parse_spec() -> io::Result<()> {
+        const SHORT: &[u8] = &[96];
+        const LONG: &[u8] = &[0x80 | 0x11, 0xda, 0xef, 0x31];
+        assert_eq!(VarInt::read(SHORT)?, VarInt(96));
+        assert_eq!(VarInt::read(LONG)?, VarInt(0x11daef31));
+        Ok(())
+    }
+
+    #[test]
+    fn parse_invalid() {
+        const LONG: &[u8] = &[0x80 | 0x11, 0xda, 0xef, 0x31];
+        for len in 1..4 {
+            let buf = &LONG[..len];
+            match VarInt::read(buf) {
+                Ok(v) => assert!(false, "decoded {buf:?} as {v:?}"),
+                Err(e) => assert_eq!(e.kind(), io::ErrorKind::UnexpectedEof),
+            }
+        }
+    }
+}
