@@ -108,6 +108,13 @@ mod tests {
     }
 
     #[test]
+    fn unknown_spec() {
+        const GOOD: [u8; 8] = [0xe7, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let body = UnknownType::from_bytes(GOOD);
+        assert_eq!(body.rtype, 0xe7);
+    }
+
+    #[test]
     fn beginrequest_roundtrip() -> Result<(), ProtocolError> {
         use Role::*;
         for role in [Responder, Authorizer, Filter] {
@@ -119,6 +126,26 @@ mod tests {
             }
         }
         Ok(())
+    }
+
+    #[test]
+    fn beginrequest_spec() -> Result<(), ProtocolError> {
+        const GOOD: [u8; 8] = [0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let body = BeginRequest::from_bytes(GOOD)?;
+        assert_eq!(body.role, Role::Responder);
+        assert_eq!(body.flags.bits(), RequestFlags::KeepConn.bits());
+        Ok(())
+    }
+
+    #[test]
+    fn beginrequest_invalid() {
+        const BAD_ROLE: [u8; 8] = [0xa3, 0x03, 0x00, 0xf1, 0x34, 0x51, 0xb2, 0x19];
+        let bad_role = BeginRequest::from_bytes(BAD_ROLE);
+        assert!(matches!(bad_role, Err(ProtocolError::UnknownRole(0xa303))));
+
+        const BAD_FLAGS: [u8; 8] = [0x00, 0x01, 0xf7, 0x65, 0x5c, 0x91, 0x2d, 0x00];
+        let bad_flags = BeginRequest::from_bytes(BAD_FLAGS);
+        assert!(matches!(bad_flags, Err(ProtocolError::UnknownFlags(0xf6))));
     }
 
     #[test]
@@ -136,14 +163,12 @@ mod tests {
     }
 
     #[test]
-    fn beginrequest_invalid() {
-        const BAD_ROLE: [u8; 8] = [0xa3, 0x03, 0x00, 0xf1, 0x34, 0x51, 0xb2, 0x19];
-        let bad_role = BeginRequest::from_bytes(BAD_ROLE);
-        assert!(matches!(bad_role, Err(ProtocolError::UnknownRole(0xa303))));
-
-        const BAD_FLAGS: [u8; 8] = [0x00, 0x01, 0xf7, 0x65, 0x5c, 0x91, 0x2d, 0x00];
-        let bad_flags = BeginRequest::from_bytes(BAD_FLAGS);
-        assert!(matches!(bad_flags, Err(ProtocolError::UnknownFlags(0xf6))));
+    fn endrequest_spec() -> Result<(), ProtocolError> {
+        const GOOD: [u8; 8] = [0x57, 0xfe, 0x26, 0x57, 0x00, 0x00, 0x00, 0x00];
+        let body = EndRequest::from_bytes(GOOD)?;
+        assert_eq!(body.app_status, 0x57fe2657);
+        assert_eq!(body.protocol_status, ProtocolStatus::RequestComplete);
+        Ok(())
     }
 
     #[test]
