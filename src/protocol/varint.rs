@@ -5,7 +5,7 @@ use super::Error as ProtocolError;
 
 
 /// A [`u32`] which can be variably encoded in either 1 or 4 bytes.
-#[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct VarInt(u32);
 
@@ -113,13 +113,6 @@ impl TryFrom<usize> for VarInt {
     }
 }
 
-
-impl fmt::Debug for VarInt {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&self.0, f)
-    }
-}
 
 impl fmt::Display for VarInt {
     #[inline]
