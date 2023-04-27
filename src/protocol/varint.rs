@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn roundtrip() -> io::Result<()> {
-        for v in [0, 1, 62, 127, 178, 251, 496, 6819, 92765, 8683895, VarInt::MAX.0] {
+        for v in [0, 1, 62, 127, 178, 251, 496, 6819, 92765, 8_683_895, VarInt::MAX.0] {
             let orig = VarInt(v);
             let mut buf = [0; 4];
             let len = orig.write(&mut buf[..])?;
@@ -164,7 +164,7 @@ mod tests {
         const SHORT: &[u8] = &[96];
         const LONG: &[u8] = &[0x80 | 0x11, 0xda, 0xef, 0x31];
         assert_eq!(VarInt::read(SHORT)?, VarInt(96));
-        assert_eq!(VarInt::read(LONG)?, VarInt(0x11daef31));
+        assert_eq!(VarInt::read(LONG)?, VarInt(0x11da_ef31));
         Ok(())
     }
 
@@ -174,7 +174,7 @@ mod tests {
         for len in 1..4 {
             let buf = &LONG[..len];
             match VarInt::read(buf) {
-                Ok(v) => assert!(false, "decoded {buf:?} as {v:?}"),
+                Ok(v) => panic!("decoded {buf:?} as {v:?}"),
                 Err(e) => assert_eq!(e.kind(), io::ErrorKind::UnexpectedEof),
             }
         }

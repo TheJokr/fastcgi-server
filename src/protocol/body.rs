@@ -152,7 +152,7 @@ mod tests {
     fn endrequest_roundtrip() -> Result<(), ProtocolError> {
         use ProtocolStatus::*;
         for protocol_status in [RequestComplete, CantMpxConn, Overloaded, UnknownRole] {
-            for app_status in [0, 1, 178, 28825, 86828, 0xaf89ef93, u32::MAX] {
+            for app_status in [0, 1, 178, 28825, 86828, 0xaf89_ef93, u32::MAX] {
                 let orig = EndRequest { app_status, protocol_status };
                 let rt = EndRequest::from_bytes(orig.to_bytes())?;
                 assert_eq!(orig.app_status, rt.app_status);
@@ -166,7 +166,7 @@ mod tests {
     fn endrequest_spec() -> Result<(), ProtocolError> {
         const GOOD: [u8; 8] = [0x57, 0xfe, 0x26, 0x57, 0x00, 0x00, 0x00, 0x00];
         let body = EndRequest::from_bytes(GOOD)?;
-        assert_eq!(body.app_status, 0x57fe2657);
+        assert_eq!(body.app_status, 0x57fe_2657);
         assert_eq!(body.protocol_status, ProtocolStatus::RequestComplete);
         Ok(())
     }

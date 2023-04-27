@@ -80,9 +80,9 @@ mod tests {
     fn parse_unk() {
         const UNK_VAR: &str = "Atä w_3tFA-Es^Ü2";
         match ProtocolVariables::parse_name(UNK_VAR.as_bytes()) {
-            Ok(v) => assert!(false, "parsed {UNK_VAR:?} as {}", v.0),
+            Ok(v) => panic!("parsed {UNK_VAR:?} as {}", v.0),
             Err(ProtocolError::UnknownVariable(s)) => assert_eq!(s.as_ref(), UNK_VAR),
-            Err(e) => assert!(false, "returned unexpected error {e:#?}"),
+            Err(e) => panic!("returned unexpected error {e:#?}"),
         }
     }
 
@@ -91,9 +91,9 @@ mod tests {
         const INVALID_VAR: &[u8] = b"ASg w-f#32\xFE \xFF+_a+";
         const REPL_REPR: &str = "ASg w-f#32� �+_a+";
         match ProtocolVariables::parse_name(INVALID_VAR) {
-            Ok(v) => assert!(false, "parsed {REPL_REPR:?} as {}", v.0),
+            Ok(v) => panic!("parsed {REPL_REPR:?} as {}", v.0),
             Err(ProtocolError::UnknownVariable(s)) => assert_eq!(s.as_ref(), REPL_REPR),
-            Err(e) => assert!(false, "returned unexpected error {e:#?}"),
+            Err(e) => panic!("returned unexpected error {e:#?}"),
         }
     }
 }
