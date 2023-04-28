@@ -13,6 +13,7 @@ categories = ["network-programming", "web-programming"]
 [dependencies]
 thiserror = "1.0"
 bitflags = "2.0"
+strum = { version = "0.24", features = ["derive"] }
 
 [dev-dependencies]
 fastrand = "1.5"

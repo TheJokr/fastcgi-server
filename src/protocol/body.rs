@@ -97,6 +97,7 @@ impl EndRequest {
 #[cfg(test)]
 mod tests {
     use std::iter::repeat_with;
+    use strum::IntoEnumIterator;
     use super::*;
 
     #[test]
@@ -118,8 +119,7 @@ mod tests {
 
     #[test]
     fn beginrequest_roundtrip() -> Result<(), ProtocolError> {
-        use Role::*;
-        for role in [Responder, Authorizer, Filter] {
+        for role in Role::iter() {
             for flags in [RequestFlags::empty(), RequestFlags::KeepConn] {
                 let orig = BeginRequest { role, flags };
                 let rt = BeginRequest::from_bytes(orig.to_bytes())?;
@@ -152,10 +152,9 @@ mod tests {
 
     #[test]
     fn endrequest_roundtrip() -> Result<(), ProtocolError> {
-        use ProtocolStatus::*;
         let rand_u32 = repeat_with(|| fastrand::u32(..)).take(10);
         for app_status in rand_u32.chain([0, 1, 178, 28825, u32::MAX]) {
-            for protocol_status in [RequestComplete, CantMpxConn, Overloaded, UnknownRole] {
+            for protocol_status in ProtocolStatus::iter() {
                 let orig = EndRequest { app_status, protocol_status };
                 let rt = EndRequest::from_bytes(orig.to_bytes())?;
                 assert_eq!(orig.app_status, rt.app_status);

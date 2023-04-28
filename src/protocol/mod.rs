@@ -119,17 +119,15 @@ impl RecordHeader {
 
 #[cfg(test)]
 mod tests {
+    use strum::IntoEnumIterator;
     use super::*;
 
     #[test]
     fn header_roundtrip() -> Result<(), Error> {
-        let rtype_it = (1u8..).map_while(|v| RecordType::try_from(v).ok());
-        for rtype in rtype_it {
+        for rtype in RecordType::iter() {
             let orig = RecordHeader {
-                version: Version::V1, rtype,
-                request_id: fastrand::u16(..),
-                content_length: fastrand::u16(..),
-                padding_length: fastrand::u8(..),
+                version: Version::V1, rtype, request_id: fastrand::u16(..),
+                content_length: fastrand::u16(..), padding_length: fastrand::u8(..),
             };
             let rt = RecordHeader::from_bytes(orig.to_bytes())?;
             assert_eq!(u8::from(orig.version), rt.version.into());

@@ -2,7 +2,7 @@ use super::Error as ProtocolError;
 
 
 /// A validated FastCGI version number.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, strum::FromRepr)]
 pub enum Version {
     /// FastCGI Version 1
     V1 = 1,
@@ -17,10 +17,8 @@ impl TryFrom<u8> for Version {
     /// Returns an error if the [`u8`] is not a valid version identifier.
     #[inline]
     fn try_from(v: u8) -> Result<Self, Self::Error> {
-        match v {
-            1 => Ok(Self::V1),
-            _ => Err(ProtocolError::UnknownVersion(v)),
-        }
+        Self::from_repr(v.into())
+            .ok_or(ProtocolError::UnknownVersion(v))
     }
 }
 
@@ -34,7 +32,8 @@ impl From<Version> for u8 {
 
 /// A validated FastCGI role identifier.
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, strum::FromRepr)]
+#[cfg_attr(test, derive(strum::EnumIter))]
 pub enum Role {
     Responder = 1,
     Authorizer = 2,
@@ -50,12 +49,8 @@ impl TryFrom<u16> for Role {
     /// Returns an error if the [`u16`] is not a valid role identifier.
     #[inline]
     fn try_from(v: u16) -> Result<Self, Self::Error> {
-        match v {
-            1 => Ok(Self::Responder),
-            2 => Ok(Self::Authorizer),
-            3 => Ok(Self::Filter),
-            _ => Err(ProtocolError::UnknownRole(v)),
-        }
+        Self::from_repr(v.into())
+            .ok_or(ProtocolError::UnknownRole(v))
     }
 }
 
@@ -121,7 +116,8 @@ impl From<RequestFlags> for u8 {
 
 
 /// A validated FastCGI response protocol status.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, strum::FromRepr)]
+#[cfg_attr(test, derive(strum::EnumIter))]
 pub enum ProtocolStatus {
     /// The request completed successfully.
     RequestComplete = 0,
@@ -144,13 +140,8 @@ impl TryFrom<u8> for ProtocolStatus {
     /// Returns an error if the [`u8`] is not a valid response protocol status.
     #[inline]
     fn try_from(v: u8) -> Result<Self, Self::Error> {
-        match v {
-            0 => Ok(Self::RequestComplete),
-            1 => Ok(Self::CantMpxConn),
-            2 => Ok(Self::Overloaded),
-            3 => Ok(Self::UnknownRole),
-            _ => Err(ProtocolError::UnknownStatus(v)),
-        }
+        Self::from_repr(v.into())
+            .ok_or(ProtocolError::UnknownStatus(v))
     }
 }
 
@@ -164,7 +155,8 @@ impl From<ProtocolStatus> for u8 {
 
 /// A validated FastCGI record type.
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, strum::FromRepr)]
+#[cfg_attr(test, derive(strum::EnumIter))]
 pub enum RecordType {
     BeginRequest = 1,
     AbortRequest = 2,
@@ -188,20 +180,8 @@ impl TryFrom<u8> for RecordType {
     /// Returns an error if the [`u8`] is not a valid record type.
     #[inline]
     fn try_from(v: u8) -> Result<Self, Self::Error> {
-        match v {
-            1 => Ok(Self::BeginRequest),
-            2 => Ok(Self::AbortRequest),
-            3 => Ok(Self::EndRequest),
-            4 => Ok(Self::Params),
-            5 => Ok(Self::Stdin),
-            6 => Ok(Self::Stdout),
-            7 => Ok(Self::Stderr),
-            8 => Ok(Self::Data),
-            9 => Ok(Self::GetValues),
-            10 => Ok(Self::GetValuesResult),
-            11 => Ok(Self::Unknown),
-            _ => Err(ProtocolError::UnknownRecordType(v)),
-        }
+        Self::from_repr(v.into())
+            .ok_or(ProtocolError::UnknownRecordType(v))
     }
 }
 
