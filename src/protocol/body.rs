@@ -96,11 +96,13 @@ impl EndRequest {
 
 #[cfg(test)]
 mod tests {
+    use std::iter::repeat_with;
     use super::*;
 
     #[test]
     fn unknown_roundtrip() {
-        for rtype in [0, 1, 17, 51, 192, 246, u8::MAX] {
+        let rand_rt = repeat_with(|| fastrand::u8(..)).take(5);
+        for rtype in rand_rt.chain([0, 1, 246, u8::MAX]) {
             let orig = UnknownType { rtype };
             let rt = UnknownType::from_bytes(orig.to_bytes());
             assert_eq!(orig.rtype, rt.rtype);
@@ -151,8 +153,9 @@ mod tests {
     #[test]
     fn endrequest_roundtrip() -> Result<(), ProtocolError> {
         use ProtocolStatus::*;
-        for protocol_status in [RequestComplete, CantMpxConn, Overloaded, UnknownRole] {
-            for app_status in [0, 1, 178, 28825, 86828, 0xaf89_ef93, u32::MAX] {
+        let rand_u32 = repeat_with(|| fastrand::u32(..)).take(10);
+        for app_status in rand_u32.chain([0, 1, 178, 28825, u32::MAX]) {
+            for protocol_status in [RequestComplete, CantMpxConn, Overloaded, UnknownRole] {
                 let orig = EndRequest { app_status, protocol_status };
                 let rt = EndRequest::from_bytes(orig.to_bytes())?;
                 assert_eq!(orig.app_status, rt.app_status);

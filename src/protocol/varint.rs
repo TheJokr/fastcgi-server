@@ -124,6 +124,7 @@ impl fmt::Display for VarInt {
 
 #[cfg(test)]
 mod tests {
+    use std::iter::repeat_with;
     use super::*;
 
     #[test]
@@ -149,7 +150,8 @@ mod tests {
 
     #[test]
     fn roundtrip() -> io::Result<()> {
-        for v in [0, 1, 62, 127, 178, 251, 496, 6819, 92765, 8_683_895, VarInt::MAX.0] {
+        let rand_v = repeat_with(|| fastrand::u32(..=VarInt::MAX.0)).take(50);
+        for v in rand_v.chain([0, 1, 62, 127, 178, 251, 6819, VarInt::MAX.0]) {
             let orig = VarInt(v);
             let mut buf = [0; 4];
             let len = orig.write(&mut buf[..])?;
