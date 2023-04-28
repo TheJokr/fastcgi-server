@@ -115,3 +115,75 @@ impl RecordHeader {
         buf
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn header_roundtrip() -> Result<(), Error> {
+        let rtype_it = (1u8..).map_while(|v| RecordType::try_from(v).ok());
+        for rtype in rtype_it {
+            let orig = RecordHeader {
+                version: Version::V1, rtype,
+                request_id: fastrand::u16(..),
+                content_length: fastrand::u16(..),
+                padding_length: fastrand::u8(..),
+            };
+            let rt = RecordHeader::from_bytes(orig.to_bytes())?;
+            assert_eq!(u8::from(orig.version), rt.version.into());
+            assert_eq!(orig.rtype, rt.rtype);
+            assert_eq!(orig.request_id, rt.request_id);
+            assert_eq!(orig.content_length, rt.content_length);
+            assert_eq!(orig.padding_length, rt.padding_length);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn header_spec() -> Result<(), Error> {
+        const GOOD: [u8; 8] = [0x01, 0x09, 0x46, 0xaf, 0x32, 0xa4, 0x8b, 0x00];
+        let head = RecordHeader::from_bytes(GOOD)?;
+        assert_eq!(u8::from(head.version), 1);
+        assert_eq!(head.rtype, RecordType::GetValues);
+        assert_eq!(head.request_id, 0x46af);
+        assert_eq!(head.content_length, 0x32a4);
+        assert_eq!(head.padding_length, 0x8b);
+        Ok(())
+    }
+
+    #[test]
+    fn header_invalid() {
+        const BAD_VERSION: [u8; 8] = [0xe5, 0x03, 0xc8, 0xf4, 0xe0, 0xa3, 0x76, 0xa8];
+        let bad_version = RecordHeader::from_bytes(BAD_VERSION);
+        assert!(matches!(bad_version, Err(Error::UnknownVersion(0xe5))));
+
+        const BAD_RTYPE: [u8; 8] = [0x01, 0x7a, 0xdb, 0x58, 0x1b, 0x4b, 0x87, 0x6b];
+        let bad_rtype = RecordHeader::from_bytes(BAD_RTYPE);
+        assert!(matches!(bad_rtype, Err(Error::UnknownRecordType(0x7a))));
+    }
+
+    #[test]
+    fn is_mgmt() {
+        use RecordType::*;
+        for rtype in [GetValues, GetValuesResult, Unknown] {
+            let mut head = RecordHeader {
+                version: Version::V1, rtype, request_id: FCGI_NULL_REQUEST_ID,
+                content_length: fastrand::u16(..), padding_length: fastrand::u8(..),
+            };
+            assert!(head.is_management());
+            head.request_id = fastrand::u16(1..);
+            assert!(!head.is_management());
+        }
+
+        let mut head = RecordHeader {
+            version: Version::V1, rtype: RecordType::BeginRequest,
+            request_id: FCGI_NULL_REQUEST_ID, content_length: fastrand::u16(..),
+            padding_length: fastrand::u8(..),
+        };
+        assert!(!head.is_management());
+        head.request_id = fastrand::u16(1..);
+        assert!(!head.is_management());
+    }
+}
