@@ -28,8 +28,9 @@ impl ProtocolVariables {
     ///
     /// # Errors
     /// Returns an error if the variable name is unknown, which may also
-    /// occur when it is not UTF-8 encoded.
+    /// stem from an improper encoding.
     pub fn parse_name(name: &[u8]) -> Result<Self, ProtocolError> {
+        // All well-known variable names are ASCII-only
         let name = String::from_utf8_lossy(name);
         Self::from_name(&name).ok_or_else(
             || ProtocolError::UnknownVariable(name.into())
