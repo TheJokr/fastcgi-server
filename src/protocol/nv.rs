@@ -92,9 +92,9 @@ mod tests {
         VALUE_ONLY,
         SHORT,
         LONG,
-        (b"FCGI_MPXS_CONNS", b"1"),          // GetValuesResult
-        (b"FCGI_MAX_REQS", b"37589372"),     // GetValuesResult
-        (b"CONTENT_LENGTH", b"8382142"),     // Params stream
+        (b"FCGI_MPXS_CONNS", b"1"),       // GetValuesResult
+        (b"FCGI_MAX_REQS", b"37589372"),  // GetValuesResult
+        (b"CONTENT_LENGTH", b"8382142"),  // Params stream
         // Random bytes to test robustness
         (b"}wnJ?^dLn.!cVfJ", b"'HWSwg,NP2md'"),
         (b"T8'K", b"'ch(wconvA'"),
