@@ -11,3 +11,6 @@
 // TODO(docs): Based on FastCGI spec (especially Appendix A)
 // See: https://fastcgi-archives.github.io/FastCGI_Specification.html
 pub mod protocol;
+
+// TODO(docs): Helpers for CGI/1.1 requests/responses
+pub mod cgi;
