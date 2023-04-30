@@ -2,6 +2,8 @@ name: Continuous Integration
 run-name: CI on ${{ github.ref }}
 on:
   workflow_dispatch:
+  schedule:
+    - cron: 41 14 * * 3
   pull_request:
   push:
 
