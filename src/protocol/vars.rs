@@ -23,7 +23,7 @@ bitflags::bitflags! {
 }
 
 impl ProtocolVariables {
-    /// Converts the input bytes into a well-known FastCGI
+    /// Parses the input bytes into a well-known FastCGI
     /// [`ProtocolVariables`] item.
     ///
     /// # Errors

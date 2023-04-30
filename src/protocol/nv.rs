@@ -44,7 +44,6 @@ impl<'a> Iterator for NVIter<'a> {
         }
     }
 }
-
 impl std::iter::FusedIterator for NVIter<'_> {}
 
 
