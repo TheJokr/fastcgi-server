@@ -86,7 +86,7 @@ mod tests {
     const NAME_ONLY: NV = (b"FCGI_MAX_CONNS", b"");
     // Not used in FastCGI, but should be handled for robustness
     const VALUE_ONLY: NV = (b"", b"'qZm*]*\"d^ig3p23k4L'");
-    const NV_PAIRS: [NV; 15] = [
+    const NV_PAIRS: &[NV] = &[
         NAME_ONLY,
         VALUE_ONLY,
         SHORT,
@@ -120,7 +120,7 @@ mod tests {
     #[test]
     fn roundtrip() -> Result<(), ProtocolError> {
         let mut buf = Vec::with_capacity(4000);
-        for &nv in &NV_PAIRS {
+        for &nv in NV_PAIRS {
             write(nv, &mut buf)?;
         }
 

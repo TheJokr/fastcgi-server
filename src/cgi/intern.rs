@@ -12,6 +12,7 @@ use std::fmt;
 /// can be converted into either type with [`From`] impls.
 #[allow(missing_docs, non_camel_case_types, clippy::upper_case_acronyms)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, strum::IntoStaticStr, strum::EnumString)]
+#[cfg_attr(test, derive(strum::EnumIter))]
 #[strum(use_phf, serialize_all = "SCREAMING_SNAKE_CASE")]
 #[non_exhaustive]
 pub enum StaticVarName {

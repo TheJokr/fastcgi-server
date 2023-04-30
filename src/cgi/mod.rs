@@ -276,11 +276,181 @@ impl Hash for OwnedVarName {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::hash_map::DefaultHasher;
+    use std::iter::repeat_with;
+    use strum::IntoEnumIterator;
     use super::*;
 
     #[test]
     fn size_check() {
         use std::mem::size_of;
         assert_eq!(size_of::<OwnedVarName>(), size_of::<CompactString>());
+    }
+
+    fn rand_name() -> String {
+        let len = fastrand::usize(5..=35);
+        // Non-whitespace printable ASCII characters
+        repeat_with(|| fastrand::u8(33..127) as char).take(len).collect()
+    }
+
+    const MIXED_REF: &[(StaticVarName, &str)] = &[
+        (CONTENT_LENGTH, "CONTENT_LENGTH"),
+        (REQUEST_METHOD, "request_method"),
+        (DOCUMENT_ROOT, "doCUMeNt_RooT"),
+        (HTTPS, "Https"),
+        (HTTP_CACHE_CONTROL, "http_CACHE_control"),
+        (HTTP_USER_AGENT, "HTTP_USER_AGENT"),
+        (HTTP_X_REQUEST_ID, "HTTP_x_reQUeSt_id"),
+    ];
+
+    #[test]
+    fn static_eq() {
+        let mut static_vars: Vec<_> = StaticVarName::iter().map(OwnedVarName::from).collect();
+        for stat in &static_vars {
+            let cmp = stat.clone();
+            assert_eq!(*stat, cmp);
+            assert_eq!(stat.as_var(), cmp.as_var());
+        }
+
+        fastrand::shuffle(&mut static_vars);
+        let mut chunks = static_vars.chunks(2);
+        while let Some([v1, v2]) = chunks.next() {
+            assert_ne!(v1, v2);
+            assert_ne!(v1.as_var(), v2.as_var());
+        }
+    }
+
+    #[test]
+    fn mixed_eq() {
+        for &(stat, cust) in MIXED_REF {
+            let stat = OwnedVarName::from(stat);
+            let cust = OwnedVarName::from(cust);
+            assert_eq!(stat, cust);
+            assert_eq!(cust, stat);
+            assert_eq!(stat.as_var(), cust.as_var());
+        }
+
+        const MIXED_NEQ: &[(StaticVarName, &str)] = &[
+            (SERVER_PROTOCOL, "asdf%&&afsaFq$UZW84wbn3gv5w3w5w%!W%q3b5b32wwa"),
+            (SCRIPT_NAME, "SCRIPT_FILENAME"),
+            (REMOTE_ADDR, "server_addr"),
+            (HTTP_COOKIE, "_cookie"),
+            (HTTP_X_FORWARDED_FOR, "http_x_forwarded"),
+        ];
+        for &(stat, cust) in MIXED_NEQ {
+            let stat = OwnedVarName::from(stat);
+            let cust = OwnedVarName::from(cust);
+            assert_ne!(stat, cust);
+            assert_ne!(cust, stat);
+            assert_ne!(stat.as_var(), cust.as_var());
+        }
+    }
+
+    #[test]
+    fn str_eq() {
+        fn do_nothing(_: &mut str) {}
+
+        for mut cust in repeat_with(rand_name).take(20) {
+            let orig = OwnedVarName::from(cust.as_str());
+            for modify in [do_nothing, str::make_ascii_uppercase, str::make_ascii_lowercase] {
+                modify(&mut cust);
+                let cmp = OwnedVarName::from(cust.as_str());
+                assert_eq!(orig, cmp);
+                assert_eq!(orig.as_var(), cmp.as_var());
+            }
+        }
+
+        const STR_NEQ: &[(&str, &str)] = &[
+            ("YX,oyd'p^&4ER:eI9AddsB", "2'J6&^WP}3AS2#%(cERkb"),
+            ("xKM$>O&a%(8'", "REMOTE_PORT"),
+            (":P+?*", "2pr|y5CY\\*hNA7rT7$"),
+            ("SERVER_PORT", "HTTP_ACCEPT_ENCODING"),
+            ("HTTP_X_FORWARDED_PROTO", "W{.[2W]|^bRI[25/?s@^]I|b:I)OE%%tf"),
+        ];
+        for &(v1, v2) in STR_NEQ {
+            let v1 = OwnedVarName::from(v1);
+            let v2 = OwnedVarName::from(v2);
+            assert_ne!(v1, v2);
+            assert_ne!(v1.as_var(), v2.as_var());
+        }
+    }
+
+    #[test]
+    fn cmp() {
+        use std::cmp::Ordering::*;
+        let mut vars: Vec<_> = StaticVarName::iter().map(OwnedVarName::from).collect();
+        vars.extend(repeat_with(rand_name).map(OwnedVarName::from).take(50));
+
+        fastrand::shuffle(&mut vars);
+        vars.sort_unstable();
+        let mut windows = vars.windows(2);
+        while let Some([v1, v2]) = windows.next() {
+            if v1 == v2 {
+                assert!(matches!(v1.partial_cmp(v2), Some(Equal)));
+                assert!(matches!(v2.partial_cmp(v1), Some(Equal)));
+            } else {
+                assert!(matches!(v1.partial_cmp(v2), Some(Less)));
+                assert!(matches!(v2.partial_cmp(v1), Some(Greater)));
+                assert!(v1.as_var() < v2.as_var());
+                assert!(v2.as_var() > v1.as_var());
+            }
+        }
+    }
+
+    #[test]
+    fn borrow_hash() {
+        // Custom hasher to check bytestream equality
+        #[derive(Default)]
+        struct TestHasher(Vec<u8>);
+        impl Hasher for TestHasher {
+            fn write(&mut self, bytes: &[u8]) {
+                self.0.extend(bytes);
+            }
+            fn finish(&self) -> u64 {
+                let mut real_hasher = DefaultHasher::default();
+                real_hasher.write(&self.0);
+                real_hasher.finish()
+            }
+        }
+
+        let var_iter = StaticVarName::iter().map(OwnedVarName::from)
+            .chain(repeat_with(rand_name).map(OwnedVarName::from).take(100));
+
+        for owned in var_iter {
+            let mut own_hasher = TestHasher::default();
+            let mut ref_hasher = TestHasher::default();
+            owned.hash(&mut own_hasher);
+            owned.as_var().hash(&mut ref_hasher);
+            assert_eq!(own_hasher.0, ref_hasher.0);
+        }
+    }
+
+    #[test]
+    fn parse_static() {
+        for &(stat, name) in MIXED_REF {
+            let name = name.to_owned();
+            let var = OwnedVarName::from(name);
+            assert!(matches!(var, OwnedVarName(VarNameInner::Static(s)) if s == stat));
+        }
+
+        for stat in StaticVarName::iter() {
+            let name: &str = stat.into();
+            let var = OwnedVarName::from(name);
+            assert!(matches!(var, OwnedVarName(VarNameInner::Static(s)) if s == stat));
+        }
+    }
+
+    #[test]
+    fn custom_norm() {
+        const STR_REF: &[(&str, &str)] = &[
+            ("some-var-name", "SOME-VAR-NAME"),
+            ("a39j_AZMVTW**jw621", "A39J_AZMVTW**JW621"),
+            ("6ar2!463'_2!51D6A---a$$a&agw2", "6AR2!463'_2!51D6A---A$$A&AGW2"),
+        ];
+        for &(name, exp) in STR_REF {
+            let name = name.to_owned();
+            let var = OwnedVarName::from(name);
+            assert_eq!(var.as_ref(), exp);
+        }
     }
 }
