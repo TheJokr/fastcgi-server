@@ -53,6 +53,7 @@ impl VarInt {
     /// in these cases is useful for indexing, which is bounded by [`usize::MAX`]
     /// because of addressing limitations anyway.
     #[inline]
+    #[must_use]
     pub fn to_usize(self) -> usize {
         usize::try_from(self.0).unwrap_or(usize::MAX)
     }
