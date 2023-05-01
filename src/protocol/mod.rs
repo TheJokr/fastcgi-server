@@ -57,7 +57,7 @@ pub enum Error {
 
 
 /// A FastCGI record header.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RecordHeader {
     /// The FastCGI version of this record.
     pub version: Version,
@@ -130,11 +130,7 @@ mod tests {
                 content_length: fastrand::u16(..), padding_length: fastrand::u8(..),
             };
             let rt = RecordHeader::from_bytes(orig.to_bytes())?;
-            assert_eq!(u8::from(orig.version), rt.version.into());
-            assert_eq!(orig.rtype, rt.rtype);
-            assert_eq!(orig.request_id, rt.request_id);
-            assert_eq!(orig.content_length, rt.content_length);
-            assert_eq!(orig.padding_length, rt.padding_length);
+            assert_eq!(orig, rt);
         }
         Ok(())
     }
@@ -143,7 +139,7 @@ mod tests {
     fn header_spec() -> Result<(), Error> {
         const GOOD: [u8; 8] = [0x01, 0x09, 0x46, 0xaf, 0x32, 0xa4, 0x8b, 0x00];
         let head = RecordHeader::from_bytes(GOOD)?;
-        assert_eq!(u8::from(head.version), 1);
+        assert_eq!(head.version, Version::V1);
         assert_eq!(head.rtype, RecordType::GetValues);
         assert_eq!(head.request_id, 0x46af);
         assert_eq!(head.content_length, 0x32a4);

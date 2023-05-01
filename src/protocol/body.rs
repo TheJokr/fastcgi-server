@@ -3,7 +3,7 @@ use super::{ProtocolStatus, RequestFlags, Role};
 
 
 /// The body of a [`RecordType::Unknown`] FastCGI record.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct UnknownType {
     /// The type of the unknown record.
     pub rtype: u8,
@@ -29,7 +29,7 @@ impl UnknownType {
 
 
 /// The body of a [`RecordType::BeginRequest`] FastCGI record.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BeginRequest {
     /// The role of the FastCGI application in this request.
     pub role: Role,
@@ -62,7 +62,7 @@ impl BeginRequest {
 
 
 /// The body of a [`RecordType::EndRequest`] FastCGI record.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct EndRequest {
     /// The application's response status code, as would be set via exit(3)
     /// in regular CGI.
@@ -106,7 +106,7 @@ mod tests {
         for rtype in rand_rt.chain([0, 1, 246, u8::MAX]) {
             let orig = UnknownType { rtype };
             let rt = UnknownType::from_bytes(orig.to_bytes());
-            assert_eq!(orig.rtype, rt.rtype);
+            assert_eq!(orig, rt);
         }
     }
 
@@ -123,8 +123,7 @@ mod tests {
             for flags in [RequestFlags::empty(), RequestFlags::KeepConn] {
                 let orig = BeginRequest { role, flags };
                 let rt = BeginRequest::from_bytes(orig.to_bytes())?;
-                assert_eq!(orig.role, rt.role);
-                assert_eq!(orig.flags.bits(), rt.flags.bits());
+                assert_eq!(orig, rt);
             }
         }
         Ok(())
@@ -135,7 +134,7 @@ mod tests {
         const GOOD: [u8; 8] = [0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00];
         let body = BeginRequest::from_bytes(GOOD)?;
         assert_eq!(body.role, Role::Responder);
-        assert_eq!(body.flags.bits(), RequestFlags::KeepConn.bits());
+        assert_eq!(body.flags, RequestFlags::KeepConn);
         Ok(())
     }
 
@@ -157,8 +156,7 @@ mod tests {
             for protocol_status in ProtocolStatus::iter() {
                 let orig = EndRequest { app_status, protocol_status };
                 let rt = EndRequest::from_bytes(orig.to_bytes())?;
-                assert_eq!(orig.app_status, rt.app_status);
-                assert_eq!(orig.protocol_status, rt.protocol_status);
+                assert_eq!(orig, rt);
             }
         }
         Ok(())

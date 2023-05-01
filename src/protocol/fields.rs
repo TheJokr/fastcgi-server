@@ -1,8 +1,10 @@
+use std::fmt;
+
 use super::Error as ProtocolError;
 
 
 /// A validated FastCGI version number.
-#[derive(Debug, Clone, Copy, strum::FromRepr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, strum::FromRepr)]
 pub enum Version {
     /// FastCGI Version 1
     V1 = 1,
@@ -81,7 +83,7 @@ impl Role {
 
 bitflags::bitflags! {
     /// A validated set of FastCGI request flags.
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct RequestFlags: u8 {
         /// Keep the connection open after processing this request.
         const KeepConn = 1;
@@ -91,7 +93,7 @@ bitflags::bitflags! {
 impl TryFrom<u8> for RequestFlags {
     type Error = ProtocolError;
 
-    /// Parses a [`u8`] as a set of FastCGI [`RequestFlags`].
+    /// Parses a [`u8`] as a FastCGI [`RequestFlags`] set.
     ///
     /// # Errors
     /// Returns an error if the [`u8`] is not a valid set of request flags.
@@ -111,6 +113,14 @@ impl From<RequestFlags> for u8 {
     #[inline]
     fn from(v: RequestFlags) -> Self {
         v.bits()
+    }
+}
+
+impl fmt::Debug for RequestFlags {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        const UNUSED_BITS: u32 = RequestFlags::all().bits().leading_zeros();
+        const WIDTH: usize = 2 /* 0b */ + 8 /* bits */ - (UNUSED_BITS as usize);
+        write!(f, "RequestFlags({self:#0WIDTH$b})")
     }
 }
 
