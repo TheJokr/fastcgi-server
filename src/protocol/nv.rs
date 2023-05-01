@@ -2,43 +2,51 @@ use std::io::prelude::*;
 
 use super::varint::VarInt;
 use super::Error as ProtocolError;
+use crate::ext::Bytes;
 
 
-/// An iterator decoding complete name-value pairs from its input.
+/// An iterator decoding FastCGI name-value pairs from its input.
+///
+/// This iterator is generic over its input `T`, which can be either
+/// a `&[u8]` or a `&mut [u8]`. The returned name-value pairs are carved
+/// out of the input slice and thus have the same type `T`.
 #[derive(Debug, Clone)]
 #[must_use = "iterators are lazy and do nothing unless consumed"]
-pub struct NVIter<'a> {
-    data: &'a [u8],
+pub struct NVIter<T> {
+    data: T,
 }
 
-impl<'a> NVIter<'a> {
-    /// Creates a new [`NVIter`] over the referenced input bytes.
+impl<T> NVIter<T> {
+    /// Creates a new [`NVIter`] over the input byte slice.
     #[inline]
-    pub fn new(data: &'a [u8]) -> Self {
+    pub fn new(data: T) -> Self {
         Self { data }
     }
 
     /// Extracts the remaining input bytes from the iterator.
     #[inline]
     #[must_use]
-    pub fn into_inner(self) -> &'a [u8] {
+    pub fn into_inner(self) -> T {
         self.data
     }
 }
 
-impl<'a> Iterator for NVIter<'a> {
+impl<T: Bytes> Iterator for NVIter<T> {
     /// The name-value pair returned by the iterator.
-    type Item = (&'a [u8], &'a [u8]);
+    type Item = (T, T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut cur = self.data;
+        let mut cur = &*self.data;
         let name_len = VarInt::read(&mut cur).ok()?.to_usize();
         let val_len = VarInt::read(&mut cur).ok()?.to_usize();
-        let total_len = name_len.saturating_add(val_len);
+        let head_len = self.data.len() - cur.len();
+        let total_len = head_len.saturating_add(name_len).saturating_add(val_len);
 
-        if cur.len() >= total_len {
-            self.data = &cur[total_len..];
-            Some((&cur[..name_len], &cur[name_len..total_len]))
+        if self.data.len() >= total_len {
+            let mut nv = self.data.split_head(total_len);
+            nv.advance_by(head_len);
+            let name = nv.split_head(name_len);
+            Some((name, nv))
         } else {
             None
         }
@@ -50,10 +58,10 @@ impl<'a> Iterator for NVIter<'a> {
         (0, Some(self.data.len() / 2))
     }
 }
-impl std::iter::FusedIterator for NVIter<'_> {}
+impl<T: Bytes> std::iter::FusedIterator for NVIter<T> {}
 
 
-/// Encodes a name-value pair into the writer's output.
+/// Encodes a FastCGI name-value pair into the writer's output.
 ///
 /// # Errors
 /// Any errors from [`Write::write_all`] are forwarded to the caller.
@@ -70,7 +78,7 @@ pub fn write((name, value): (&[u8], &[u8]), mut w: impl Write) -> Result<usize, 
 mod tests {
     use super::*;
 
-    type NV<'a> = <NVIter<'a> as Iterator>::Item;
+    type NV<'a> = <NVIter<&'a [u8]> as Iterator>::Item;
 
     // Used in Params stream
     const SHORT: NV = (b"GATEWAY_INTERFACE", b"CGI/1.1");
@@ -129,24 +137,36 @@ mod tests {
         for &nv in NV_PAIRS {
             write(nv, &mut buf)?;
         }
+        parse_inner(&*buf, NV_PAIRS.iter());
+        Ok(())
+    }
 
-        let mut orig_it = NV_PAIRS.iter();
-        let mut rt_it = NVIter::new(&buf);
+    #[test]
+    fn parse_mut() {
+        let mut buf = Vec::with_capacity(4000);
+        buf.extend([LONG_ENC, SHORT_ENC].into_iter().cycle().take(20).flatten());
+        let orig_it = [LONG, SHORT].iter().cycle().take(20);
+        parse_inner(&mut *buf, orig_it);
+    }
+
+    fn parse_inner<'a>(buf: impl Bytes, mut orig_it: impl Iterator<Item = &'a NV<'a>>) {
+        let mut rt_it = NVIter::new(buf);
         if let (min_len, Some(max_len)) = rt_it.size_hint() {
-            assert!(min_len <= NV_PAIRS.len());
-            assert!(NV_PAIRS.len() <= max_len);
+            let (orig_min, orig_max) = orig_it.size_hint();
+            assert!(min_len <= orig_min);
+            assert!(max_len >= orig_max.expect("orig_it is unbounded"));
         }
 
         for rt_nv in &mut rt_it {
             let &orig_nv = orig_it.next()
                 .expect("NVIter returned too many elements");
-            assert_eq!(orig_nv, rt_nv);
+            assert_eq!(orig_nv.0, &*rt_nv.0);
+            assert_eq!(orig_nv.1, &*rt_nv.1);
         }
         assert!(matches!(orig_it.next(), None), "NVIter returned too few elements");
 
-        let rem = rt_it.into_inner();
+        let rem = &*rt_it.into_inner();
         assert_eq!(rem.len(), 0, "NVIter did not consume all input: {rem:?}");
-        Ok(())
     }
 
     #[test]
@@ -167,7 +187,7 @@ mod tests {
 
         let extend_by = buf.len() / 3;
         buf.extend_from_within(..extend_by);
-        let mut it = NVIter::new(&buf);
+        let mut it = NVIter::new(&*buf);
         assert_eq!(it.next(), Some(nv));
         assert_eq!(it.next(), None);
         assert_eq!(it.into_inner(), &buf[..extend_by]);

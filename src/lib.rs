@@ -8,6 +8,9 @@
 #![allow(clippy::enum_glob_use, clippy::items_after_statements)]
 
 
+/// Helpful extension traits shared across the crate.
+pub(crate) mod ext;
+
 // TODO(docs): Based on FastCGI spec (especially Appendix A)
 // See: https://fastcgi-archives.github.io/FastCGI_Specification.html
 pub mod protocol;
