@@ -43,6 +43,12 @@ impl<'a> Iterator for NVIter<'a> {
             None
         }
     }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // A name-value pair always consists of at least 2 bytes
+        (0, Some(self.data.len() / 2))
+    }
 }
 impl std::iter::FusedIterator for NVIter<'_> {}
 
@@ -126,6 +132,11 @@ mod tests {
 
         let mut orig_it = NV_PAIRS.iter();
         let mut rt_it = NVIter::new(&buf);
+        if let (min_len, Some(max_len)) = rt_it.size_hint() {
+            assert!(min_len <= NV_PAIRS.len());
+            assert!(NV_PAIRS.len() <= max_len);
+        }
+
         for rt_nv in &mut rt_it {
             let &orig_nv = orig_it.next()
                 .expect("NVIter returned too many elements");
