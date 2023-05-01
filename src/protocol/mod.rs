@@ -41,9 +41,9 @@ pub enum Error {
     /// The FastCGI response protocol status specifies an unknown status.
     #[error("unknown FastCGI protocol status {0}")]
     UnknownStatus(u8),
-    /// The FastCGI variable name did not match any well-known name.
-    #[error("unknown FastCGI variable name {0}")]
-    UnknownVariable(Box<str>),
+    /// The FastCGI variable name did not match any well-known value.
+    #[error("unknown FastCGI protocol variable name")]
+    UnknownVariable,
 
     /// The input value is too large to be encoded as a FastCGI VarInt.
     #[error("input is too large to be encoded as a FastCGI VarInt")]
