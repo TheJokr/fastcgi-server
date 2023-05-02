@@ -1,7 +1,6 @@
-use std::io::prelude::*;
+use std::io::{self, prelude::*};
 
 use super::varint::VarInt;
-use super::Error as ProtocolError;
 use crate::ext::Bytes;
 
 
@@ -64,10 +63,18 @@ impl<T: Bytes> std::iter::FusedIterator for NVIter<T> {}
 /// Encodes a FastCGI name-value pair into the writer's output.
 ///
 /// # Errors
-/// Any errors from [`Write::write_all`] are forwarded to the caller.
-pub fn write((name, value): (&[u8], &[u8]), mut w: impl Write) -> Result<usize, ProtocolError> {
-    let mut written = VarInt::try_from(name.len())?.write(&mut w)?;
-    written += VarInt::try_from(value.len())?.write(&mut w)?;
+/// Returns an error with [`io::ErrorKind::InvalidInput`] if either part of the
+/// name-value pair exceeds the bounds of a FastCGI [`VarInt`]. Additionally,
+/// any errors from [`Write::write_all`] are forwarded to the caller.
+pub fn write((name, value): (&[u8], &[u8]), mut w: impl Write) -> io::Result<usize> {
+    let mut written = 0;
+    for len in [name.len(), value.len()] {
+        written += match VarInt::try_from(len) {
+            Ok(v) => v.write(&mut w)?,
+            Err(e) => return Err(io::Error::new(io::ErrorKind::InvalidInput, e)),
+        }
+    }
+
     w.write_all(name)?;
     w.write_all(value)?;
     Ok(written + name.len() + value.len())
@@ -120,7 +127,7 @@ mod tests {
     ];
 
     #[test]
-    fn write_spec() -> Result<(), ProtocolError> {
+    fn write_spec() -> io::Result<()> {
         let mut buf = Vec::with_capacity(1000);
         write(SHORT, &mut buf)?;
         assert_eq!(buf, SHORT_ENC);
@@ -132,7 +139,7 @@ mod tests {
     }
 
     #[test]
-    fn roundtrip() -> Result<(), ProtocolError> {
+    fn roundtrip() -> io::Result<()> {
         let mut buf = Vec::with_capacity(4000);
         for &nv in NV_PAIRS {
             write(nv, &mut buf)?;
@@ -170,12 +177,12 @@ mod tests {
     }
 
     #[test]
-    fn parse_invalid() -> Result<(), ProtocolError> {
+    fn parse_invalid() -> io::Result<()> {
         parse_invalid_impl(SHORT)?;
         parse_invalid_impl(LONG)
     }
 
-    fn parse_invalid_impl(nv: NV) -> Result<(), ProtocolError> {
+    fn parse_invalid_impl(nv: NV) -> io::Result<()> {
         let mut buf = Vec::with_capacity(1000);
         write(nv, &mut buf)?;
         for len in [0, 1, buf.len() / 3, buf.len() / 2, buf.len().saturating_sub(5)] {

@@ -1,5 +1,3 @@
-use std::io;
-
 pub mod body;
 mod fields;
 pub mod nv;
@@ -23,7 +21,7 @@ pub const FCGI_LISTENSOCK_FILENO: std::os::fd::RawFd = 0;
 
 
 /// Error types that may occur while processing FastCGI protocol elements.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
     /// The FastCGI version field specifies an unknown version identifier.
@@ -48,11 +46,6 @@ pub enum Error {
     /// The input value is too large to be encoded as a FastCGI VarInt.
     #[error("input is too large to be encoded as a FastCGI VarInt")]
     InvalidVarInt,
-
-    /// An unexpected error occured during an IO operation. This can only
-    /// happen in functions taking a generic [`Read`] or [`Write`] parameter.
-    #[error(transparent)]
-    Io(#[from] io::Error),
 }
 
 
