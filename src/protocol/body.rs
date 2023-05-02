@@ -10,18 +10,21 @@ pub struct UnknownType {
 }
 
 impl UnknownType {
+    /// The number of bytes in the wire format of an [`UnknownType`] body.
+    pub const LEN: usize = 8;
+
     /// Parses the input bytes into a FastCGI [`UnknownType`] record body.
     #[inline]
     #[must_use]
-    pub fn from_bytes(data: [u8; 8]) -> Self {
+    pub fn from_bytes(data: [u8; Self::LEN]) -> Self {
         Self { rtype: data[0] }
     }
 
     /// Encodes the [`UnknownType`] record body into its binary wire format.
     #[inline]
     #[must_use]
-    pub fn to_bytes(self) -> [u8; 8] {
-        let mut buf = [0; 8];
+    pub fn to_bytes(self) -> [u8; Self::LEN] {
+        let mut buf = [0; Self::LEN];
         buf[0] = self.rtype;
         buf
     }
@@ -38,11 +41,14 @@ pub struct BeginRequest {
 }
 
 impl BeginRequest {
+    /// The number of bytes in the wire format of a [`BeginRequest`] body.
+    pub const LEN: usize = 8;
+
     /// Parses the input bytes into a FastCGI [`BeginRequest`] record body.
     ///
     /// # Errors
     /// Returns an error if any of the body components are invalid.
-    pub fn from_bytes(data: [u8; 8]) -> Result<Self, ProtocolError> {
+    pub fn from_bytes(data: [u8; Self::LEN]) -> Result<Self, ProtocolError> {
         let role = u16::from_be_bytes([data[0], data[1]]);
         Ok(Self {
             role: Role::try_from(role)?,
@@ -52,8 +58,8 @@ impl BeginRequest {
 
     /// Encodes the [`BeginRequest`] record body into its binary wire format.
     #[must_use]
-    pub fn to_bytes(self) -> [u8; 8] {
-        let mut buf = [0; 8];
+    pub fn to_bytes(self) -> [u8; Self::LEN] {
+        let mut buf = [0; Self::LEN];
         buf[..2].copy_from_slice(&u16::to_be_bytes(self.role.into()));
         buf[2] = self.flags.into();
         buf
@@ -72,11 +78,14 @@ pub struct EndRequest {
 }
 
 impl EndRequest {
+    /// The number of bytes in the wire format of an [`EndRequest`] body.
+    pub const LEN: usize = 8;
+
     /// Parses the input bytes into a FastCGI [`EndRequest`] record body.
     ///
     /// # Errors
     /// Returns an error if any of the body components are invalid.
-    pub fn from_bytes(data: [u8; 8]) -> Result<Self, ProtocolError> {
+    pub fn from_bytes(data: [u8; Self::LEN]) -> Result<Self, ProtocolError> {
         Ok(Self {
             app_status: u32::from_be_bytes([data[0], data[1], data[2], data[3]]),
             protocol_status: ProtocolStatus::try_from(data[4])?,
@@ -85,8 +94,8 @@ impl EndRequest {
 
     /// Encodes the [`EndRequest`] record body into its binary wire format.
     #[must_use]
-    pub fn to_bytes(self) -> [u8; 8] {
-        let mut buf = [0; 8];
+    pub fn to_bytes(self) -> [u8; Self::LEN] {
+        let mut buf = [0; Self::LEN];
         buf[..4].copy_from_slice(&u32::to_be_bytes(self.app_status));
         buf[4] = self.protocol_status.into();
         buf

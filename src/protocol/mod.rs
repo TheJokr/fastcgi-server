@@ -22,7 +22,7 @@ pub const FCGI_NULL_REQUEST_ID: u16 = 0;
 pub const FCGI_LISTENSOCK_FILENO: std::os::fd::RawFd = 0;
 
 
-/// Error types that may occur while parsing a FastCGI record stream.
+/// Error types that may occur while processing FastCGI protocol elements.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
@@ -87,13 +87,13 @@ impl RecordHeader {
     }
 
     /// The number of bytes in the wire format of a [`RecordHeader`].
-    pub const FCGI_HEADER_LEN: usize = 8;
+    pub const LEN: usize = 8;
 
     /// Parses the input bytes into a FastCGI [`RecordHeader`].
     ///
     /// # Errors
     /// Returns an error if any of the header components are invalid.
-    pub fn from_bytes(data: [u8; Self::FCGI_HEADER_LEN]) -> Result<Self, Error> {
+    pub fn from_bytes(data: [u8; Self::LEN]) -> Result<Self, Error> {
         Ok(Self {
             version: Version::try_from(data[0])?,
             rtype: RecordType::try_from(data[1])?,
@@ -105,8 +105,8 @@ impl RecordHeader {
 
     /// Encodes the [`RecordHeader`] into its binary wire format.
     #[must_use]
-    pub fn to_bytes(self) -> [u8; Self::FCGI_HEADER_LEN] {
-        let mut buf = [0; Self::FCGI_HEADER_LEN];
+    pub fn to_bytes(self) -> [u8; Self::LEN] {
+        let mut buf = [0; Self::LEN];
         buf[0] = self.version.into();
         buf[1] = self.rtype.into();
         buf[2..4].copy_from_slice(&u16::to_be_bytes(self.request_id));

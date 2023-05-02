@@ -11,7 +11,7 @@
 /// Helpful extension traits shared across the crate.
 pub(crate) mod ext;
 
-// TODO(docs): Based on FastCGI spec (especially Appendix A)
+// TODO(docs): Based on FastCGI spec (especially Section 8)
 // See: https://fastcgi-archives.github.io/FastCGI_Specification.html
 pub mod protocol;
 
