@@ -37,7 +37,6 @@ impl VarInt {
     /// Any errors from [`Write::write_all`] are forwarded to the caller.
     pub fn write(self, mut w: impl Write) -> io::Result<usize> {
         if self < Self::LONG_BIT.into() {
-            #[allow(clippy::cast_possible_truncation)]
             let e = [self.0 as u8];
             w.write_all(&e).and(Ok(e.len()))
         } else {

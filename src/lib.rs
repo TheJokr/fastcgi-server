@@ -5,7 +5,7 @@
 #![deny(clippy::suspicious, clippy::cargo)]
 #![deny(clippy::exit, clippy::semicolon_inside_block, clippy::unwrap_used)]
 #![warn(clippy::pedantic, clippy::multiple_crate_versions)]
-#![allow(clippy::enum_glob_use, clippy::items_after_statements)]
+#![allow(clippy::enum_glob_use, clippy::cast_possible_truncation, clippy::items_after_statements)]
 
 
 /// Helpful extension traits shared across the crate.

@@ -1,5 +1,5 @@
 use super::Error as ProtocolError;
-use super::{ProtocolStatus, RequestFlags, Role};
+use super::{ProtocolStatus, RecordHeader, RecordType, RequestFlags, Role, Version};
 
 
 /// The body of a [`RecordType::Unknown`] FastCGI record.
@@ -26,6 +26,21 @@ impl UnknownType {
     pub fn to_bytes(self) -> [u8; Self::LEN] {
         let mut buf = [0; Self::LEN];
         buf[0] = self.rtype;
+        buf
+    }
+
+    /// Encodes a full [`UnknownType`] record into its binary wire format.
+    #[must_use]
+    pub fn to_record(self, request_id: u16) -> [u8; RecordHeader::LEN + Self::LEN] {
+        let head = RecordHeader {
+            version: Version::V1, rtype: RecordType::Unknown,
+            request_id, content_length: Self::LEN as u16, padding_length: 0,
+        }.to_bytes();
+        let body = self.to_bytes();
+
+        let mut buf = [0; RecordHeader::LEN + Self::LEN];
+        buf[..RecordHeader::LEN].copy_from_slice(&head);
+        buf[RecordHeader::LEN..].copy_from_slice(&body);
         buf
     }
 }
@@ -64,6 +79,21 @@ impl BeginRequest {
         buf[2] = self.flags.into();
         buf
     }
+
+    /// Encodes a full [`BeginRequest`] record into its binary wire format.
+    #[must_use]
+    pub fn to_record(self, request_id: u16) -> [u8; RecordHeader::LEN + Self::LEN] {
+        let head = RecordHeader {
+            version: Version::V1, rtype: RecordType::BeginRequest,
+            request_id, content_length: Self::LEN as u16, padding_length: 0,
+        }.to_bytes();
+        let body = self.to_bytes();
+
+        let mut buf = [0; RecordHeader::LEN + Self::LEN];
+        buf[..RecordHeader::LEN].copy_from_slice(&head);
+        buf[RecordHeader::LEN..].copy_from_slice(&body);
+        buf
+    }
 }
 
 
@@ -100,6 +130,21 @@ impl EndRequest {
         buf[4] = self.protocol_status.into();
         buf
     }
+
+    /// Encodes a full [`EndRequest`] record into its binary wire format.
+    #[must_use]
+    pub fn to_record(self, request_id: u16) -> [u8; RecordHeader::LEN + Self::LEN] {
+        let head = RecordHeader {
+            version: Version::V1, rtype: RecordType::EndRequest,
+            request_id, content_length: Self::LEN as u16, padding_length: 0,
+        }.to_bytes();
+        let body = self.to_bytes();
+
+        let mut buf = [0; RecordHeader::LEN + Self::LEN];
+        buf[..RecordHeader::LEN].copy_from_slice(&head);
+        buf[RecordHeader::LEN..].copy_from_slice(&body);
+        buf
+    }
 }
 
 
@@ -127,6 +172,16 @@ mod tests {
     }
 
     #[test]
+    fn unknown_record() {
+        const REF: [u8; 16] = [
+            0x01, 0x0b, 0x76, 0xa8, 0x00, 0x08, 0x00, 0x00,
+            0xf6, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+        let record = UnknownType { rtype: 0xf6 }.to_record(0x76a8);
+        assert_eq!(record, REF);
+    }
+
+    #[test]
     fn beginrequest_roundtrip() -> Result<(), ProtocolError> {
         for role in Role::iter() {
             for flags in [RequestFlags::empty(), RequestFlags::KeepConn] {
@@ -145,6 +200,17 @@ mod tests {
         assert_eq!(body.role, Role::Responder);
         assert_eq!(body.flags, RequestFlags::KeepConn);
         Ok(())
+    }
+
+    #[test]
+    fn beginrequest_record() {
+        const REF: [u8; 16] = [
+            0x01, 0x01, 0xfb, 0x2a, 0x00, 0x08, 0x00, 0x00,
+            0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+        let record =
+            BeginRequest { role: Role::Authorizer, flags: RequestFlags::empty() }.to_record(0xfb2a);
+        assert_eq!(record, REF);
     }
 
     #[test]
@@ -178,6 +244,18 @@ mod tests {
         assert_eq!(body.app_status, 0x57fe_2657);
         assert_eq!(body.protocol_status, ProtocolStatus::RequestComplete);
         Ok(())
+    }
+
+    #[test]
+    fn endrequest_record() {
+        const REF: [u8; 16] = [
+            0x01, 0x03, 0x41, 0xfd, 0x00, 0x08, 0x00, 0x00,
+            0xd9, 0xf3, 0x2e, 0x7c, 0x02, 0x00, 0x00, 0x00,
+        ];
+        let record =
+            EndRequest { app_status: 0xd9f3_2e7c, protocol_status: ProtocolStatus::Overloaded }
+                .to_record(0x41fd);
+        assert_eq!(record, REF);
     }
 
     #[test]
