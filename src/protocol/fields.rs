@@ -82,7 +82,7 @@ impl Role {
 
 
 bitflags::bitflags! {
-    /// A validated set of FastCGI request flags.
+    /// A set of FastCGI request flags.
     #[derive(Default, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct RequestFlags: u8 {
         /// Keep the connection open after processing this request.
@@ -90,22 +90,14 @@ bitflags::bitflags! {
     }
 }
 
-impl TryFrom<u8> for RequestFlags {
-    type Error = ProtocolError;
-
-    /// Parses a [`u8`] as a FastCGI [`RequestFlags`] set.
+impl From<u8> for RequestFlags {
+    /// Converts a [`u8`] into a FastCGI [`RequestFlags`] set.
     ///
-    /// # Errors
-    /// Returns an error if the [`u8`] is not a valid set of request flags.
-    fn try_from(v: u8) -> Result<Self, Self::Error> {
-        let f = Self::from_bits_truncate(v);
-        if f.bits() == v {
-            Ok(f)
-        } else {
-            // Some bit(s) got truncated
-            let unk = v & !f.bits();
-            Err(ProtocolError::UnknownFlags(unk))
-        }
+    /// Any non-standard flags are retained during the conversion. The set can
+    /// be manually validated using `RequestFlags::validate`.
+    #[inline]
+    fn from(v: u8) -> Self {
+        Self::from_bits_retain(v)
     }
 }
 
@@ -118,9 +110,26 @@ impl From<RequestFlags> for u8 {
 
 impl fmt::Debug for RequestFlags {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        const UNUSED_BITS: u32 = RequestFlags::all().bits().leading_zeros();
-        const WIDTH: usize = 2 /* 0b */ + 8 /* bits */ - (UNUSED_BITS as usize);
-        write!(f, "RequestFlags({self:#0WIDTH$b})")
+        write!(f, "RequestFlags({self:#010b})")
+    }
+}
+
+impl RequestFlags {
+    /// Validates whether the [`RequestFlags`] set contains any non-standard flags.
+    ///
+    /// # Errors
+    /// Returns a [`ProtocolError::UnknownFlags`] if any of the set's flags is not
+    /// part of the FastCGI specification.
+    pub fn validate(self) -> Result<(), ProtocolError> {
+        let raw = self.bits();
+        let trunc = Self::from_bits_truncate(raw).bits();
+        if raw == trunc {
+            Ok(())
+        } else {
+            // Some bit(s) got truncated
+            let unk = raw & !trunc;
+            Err(ProtocolError::UnknownFlags(unk))
+        }
     }
 }
 
@@ -232,5 +241,14 @@ mod tests {
             assert!(!seen.intersects(f), "{} overlaps with {}", f.0, seen.0);
             seen.insert(f);
         }
+    }
+
+    #[test]
+    fn reqflag_validate() {
+        let flags = RequestFlags::all();
+        assert!(matches!(flags.validate(), Ok(())));
+
+        let flags = RequestFlags::from(0x39);
+        assert!(matches!(flags.validate(), Err(ProtocolError::UnknownFlags(0x38))));
     }
 }

@@ -67,7 +67,7 @@ impl BeginRequest {
         let role = u16::from_be_bytes([data[0], data[1]]);
         Ok(Self {
             role: Role::try_from(role)?,
-            flags: RequestFlags::try_from(data[2])?,
+            flags: RequestFlags::from(data[2]),
         })
     }
 
@@ -199,6 +199,11 @@ mod tests {
         let body = BeginRequest::from_bytes(GOOD)?;
         assert_eq!(body.role, Role::Responder);
         assert_eq!(body.flags, RequestFlags::KeepConn);
+
+        const BAD_FLAGS: [u8; 8] = [0x00, 0x01, 0xf7, 0x65, 0x5c, 0x91, 0x2d, 0x00];
+        let bad_flags = BeginRequest::from_bytes(BAD_FLAGS)?;
+        assert_eq!(bad_flags.role, Role::Responder);
+        assert_eq!(bad_flags.flags, RequestFlags::from_bits_retain(0xf7));
         Ok(())
     }
 
@@ -218,10 +223,6 @@ mod tests {
         const BAD_ROLE: [u8; 8] = [0xa3, 0x03, 0x00, 0xf1, 0x34, 0x51, 0xb2, 0x19];
         let bad_role = BeginRequest::from_bytes(BAD_ROLE);
         assert!(matches!(bad_role, Err(ProtocolError::UnknownRole(0xa303))));
-
-        const BAD_FLAGS: [u8; 8] = [0x00, 0x01, 0xf7, 0x65, 0x5c, 0x91, 0x2d, 0x00];
-        let bad_flags = BeginRequest::from_bytes(BAD_FLAGS);
-        assert!(matches!(bad_flags, Err(ProtocolError::UnknownFlags(0xf6))));
     }
 
     #[test]
