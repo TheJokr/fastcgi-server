@@ -1,4 +1,8 @@
+use compact_str::{CompactString, ToCompactString};
+
 use super::Error as ProtocolError;
+use super::{nv, RecordHeader, RecordType, Version, FCGI_NULL_REQUEST_ID};
+use crate::Config;
 
 
 bitflags::bitflags! {
@@ -35,6 +39,45 @@ impl ProtocolVariables {
             Ok(s) => Self::from_name(s).ok_or(ProtocolError::UnknownVariable),
             Err(_) => Err(ProtocolError::UnknownVariable),
         }
+    }
+
+    /// The maximum number of bytes in the wire format of a `GetValuesResult`
+    /// record emitted by `ProtocolVariables::write_response`.
+    pub const RESPONSE_LEN: usize = 104;
+
+    /// Appends a `GetValuesResult` record in wire format to the [`Vec<u8>`]
+    /// based on variable names from this [`ProtocolVariables`] set and variable
+    /// values from the [`Config`].
+    pub fn write_response(self, out: &mut Vec<u8>, config: &Config) {
+        // Reserve space for the header in out, which may already contain data
+        let start = out.len();
+        out.extend([0; RecordHeader::LEN]);
+        let mut len = 0;
+
+        for (name, var) in self.iter_names() {
+            let value = match var {
+                Self::FCGI_MAX_CONNS | Self::FCGI_MAX_REQS => config.max_conns.to_compact_string(),
+                Self::FCGI_MPXS_CONNS => CompactString::new_inline("0"),
+                _ => unreachable!("All flags should be explicitly handled"),
+            };
+            // name and value are guaranteed to fit into a VarInt here
+            len += nv::write((name.as_bytes(), value.as_bytes()), &mut *out)
+                .expect("writing into Vec<u8> should always succeed");
+        }
+
+        // Specification recommends padding to multiple of 8 bytes
+        let mut padding = len % 8;
+        if padding > 0 {
+            padding = 8 - padding;
+            out.extend(&[0; 7][..padding]);
+        }
+
+        let head = RecordHeader {
+            version: Version::V1, rtype: RecordType::GetValuesResult,
+            request_id: FCGI_NULL_REQUEST_ID, content_length: len as u16,
+            padding_length: padding as u8,
+        }.to_bytes();
+        out[start..(start + RecordHeader::LEN)].copy_from_slice(&head);
     }
 }
 
