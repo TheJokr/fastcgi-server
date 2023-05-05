@@ -65,10 +65,7 @@ impl BeginRequest {
     /// Returns an error if any of the body components are invalid.
     pub fn from_bytes(data: [u8; Self::LEN]) -> Result<Self, ProtocolError> {
         let role = u16::from_be_bytes([data[0], data[1]]);
-        Ok(Self {
-            role: Role::try_from(role)?,
-            flags: RequestFlags::from(data[2]),
-        })
+        Ok(Self { role: Role::try_from(role)?, flags: RequestFlags::from(data[2]) })
     }
 
     /// Encodes the [`BeginRequest`] record body into its binary wire format.

@@ -141,7 +141,7 @@ pub enum ProtocolStatus {
     /// The request completed successfully.
     RequestComplete = 0,
     /// A second, multiplexed request was received and the FastCGI application
-    /// doesn't support multiplexing.
+    /// does not support multiplexing.
     CantMpxConn = 1,
     /// The FastCGI application is already handling its maximum number
     /// of parallel requests.
