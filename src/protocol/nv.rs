@@ -129,11 +129,13 @@ mod tests {
     #[test]
     fn write_spec() -> io::Result<()> {
         let mut buf = Vec::with_capacity(1000);
-        write(SHORT, &mut buf)?;
+        let len = write(SHORT, &mut buf)?;
+        assert_eq!(len, buf.len());
         assert_eq!(buf, SHORT_ENC);
 
         buf.clear();
-        write(LONG, &mut buf)?;
+        let len = write(LONG, &mut buf)?;
+        assert_eq!(len, buf.len());
         assert_eq!(buf, LONG_ENC);
         Ok(())
     }
