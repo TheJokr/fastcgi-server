@@ -40,7 +40,7 @@ impl VarInt {
             let e = [self.0 as u8];
             w.write_all(&e).and(Ok(e.len()))
         } else {
-            let mut e: [u8; 4] = u32::to_be_bytes(self.0);
+            let mut e: [u8; 4] = self.0.to_be_bytes();
             e[0] |= Self::LONG_BIT;
             w.write_all(&e).and(Ok(e.len()))
         }
