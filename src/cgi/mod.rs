@@ -133,6 +133,17 @@ impl OwnedVarName {
         (&*name).into()
     }
 
+    /// Converts a [`CompactString`] into an [`OwnedVarName`], normalizing its
+    /// contents in the process.
+    #[must_use]
+    pub(crate) fn from_compact(mut name: CompactString) -> Self {
+        name.make_ascii_uppercase();
+        Self(match name.parse() {
+            Ok(s) => VarNameInner::Static(s),
+            Err(_) => VarNameInner::Custom(name),
+        })
+    }
+
     // Internal alias because self.borrow() can't infer type
     #[inline]
     fn as_var(&self) -> &VarName {
@@ -166,14 +177,9 @@ impl From<&VarName> for OwnedVarName {
 impl From<String> for OwnedVarName {
     /// Converts a [`String`] into an [`OwnedVarName`], normalizing its contents
     /// in the process.
-    fn from(mut v: String) -> Self {
-        v.make_ascii_uppercase();
-        // CompactString can reuse String's allocation here
-        // if we don't use v.as_str().into()
-        Self(match v.parse() {
-            Ok(s) => VarNameInner::Static(s),
-            Err(_) => VarNameInner::Custom(v.into()),
-        })
+    #[inline]
+    fn from(v: String) -> Self {
+        Self::from_compact(v.into())
     }
 }
 
@@ -182,7 +188,7 @@ impl From<Box<str>> for OwnedVarName {
     /// in the process.
     #[inline]
     fn from(v: Box<str>) -> Self {
-        v.into_string().into()
+        Self::from_compact(v.into())
     }
 }
 
