@@ -3,7 +3,8 @@ pub mod body;
 mod fields;
 /// An encoder and decoder for FastCGI name-value pairs.
 pub mod nv;
-mod varint;
+/// An encoder and decoder for FastCGI's variable-length integers.
+pub mod varint;
 mod vars;
 
 pub use fields::*;
