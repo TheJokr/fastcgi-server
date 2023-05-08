@@ -1,5 +1,7 @@
+/// Types representing the bodies of fixed-size FastCGI records.
 pub mod body;
 mod fields;
+/// An encoder and decoder for FastCGI name-value pairs.
 pub mod nv;
 mod varint;
 mod vars;
