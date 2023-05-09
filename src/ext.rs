@@ -27,8 +27,8 @@ impl Bytes for &[u8] {
     }
     #[inline]
     fn split_head(&mut self, len: usize) -> Self {
-        let (head, rest) = self.split_at(len);
-        *self = rest;
+        let head;
+        (head, *self) = self.split_at(len);
         head
     }
 }
