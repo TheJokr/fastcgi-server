@@ -20,6 +20,11 @@ pub mod protocol;
 // TODO(docs): Helpers for CGI/1.1 requests/responses
 pub mod cgi;
 
+// TODO(docs): Pure FastCGI record stream parser. Chunks of bytes are fed
+// in by the caller, processed, and (if applicable) output bytes are returned
+// until a complete Request is created.
+pub mod parser;
+
 
 /// The central configuration for [`fastcgi_server`](crate).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
