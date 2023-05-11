@@ -18,7 +18,7 @@ pub const FCGI_NULL_REQUEST_ID: u16 = 0;
 /// spawned directly by an HTTP server.
 ///
 /// # Example
-/// TODO(docs): show how to create a Listener from the RawFd
+// TODO(docs): show how to create a Listener from the RawFd
 #[cfg(any(target_family = "unix", target_family = "wasm"))]
 pub const FCGI_LISTENSOCK_FILENO: std::os::fd::RawFd = 0;
 
