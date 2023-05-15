@@ -1,0 +1,15 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    # Security updates only
+    open-pull-requests-limit: 0
+    schedule:
+      interval: weekly
+      day: saturday
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: saturday
