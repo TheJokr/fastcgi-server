@@ -11,9 +11,12 @@ keywords = ["fastcgi", "protocol", "backend", "web"]
 categories = ["network-programming", "web-programming"]
 
 [dependencies]
+# Exposed to users (semver-relevant)
+bitflags = "2.0"
+
+# Internal
 ref-cast = "1.0.11"
 thiserror = "1.0"
-bitflags = "2.0"
 strum = { version = "0.24", features = ["derive", "phf"] }
 strum_macros = "0.24.2"
 replace_with = "0.1.7"
