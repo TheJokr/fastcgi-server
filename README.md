@@ -1,6 +1,6 @@
 # fastcgi-server
 [![CI Status](https://github.com/TheJokr/fastcgi-server/actions/workflows/ci.yml/badge.svg)](https://github.com/TheJokr/fastcgi-server/actions/workflows/ci.yml)
-![License](https://img.shields.io/badge/license-Apache--2.0%2FMIT-informational)
+[![License](https://img.shields.io/badge/license-Apache--2.0%2FMIT-informational)](#license)
 
 A safe Rust implementation of FastCGI on the server (aka handler/upstream) side.
 The library focuses on generality and performance, avoiding allocations and copying
