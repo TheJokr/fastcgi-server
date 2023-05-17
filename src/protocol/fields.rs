@@ -216,16 +216,21 @@ impl RecordType {
     #[inline]
     #[must_use]
     pub fn is_management(self) -> bool {
-        use RecordType::*;
-        matches!(self, GetValues | GetValuesResult | Unknown)
+        matches!(self, Self::GetValues | Self::GetValuesResult | Self::Unknown)
     }
 
-    /// Tests whether this [`RecordType`] represents a stream record.
+    /// Tests whether this [`RecordType`] represents an input stream record.
     #[inline]
     #[must_use]
-    pub fn is_stream(self) -> bool {
-        use RecordType::*;
-        matches!(self, Params | Stdin | Stdout | Stderr | Data)
+    pub fn is_input_stream(self) -> bool {
+        matches!(self, Self::Stdin | Self::Data)
+    }
+
+    /// Tests whether this [`RecordType`] represents an output stream record.
+    #[inline]
+    #[must_use]
+    pub fn is_output_stream(self) -> bool {
+        matches!(self, Self::Stdout | Self::Stderr)
     }
 }
 
