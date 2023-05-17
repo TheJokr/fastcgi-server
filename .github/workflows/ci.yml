@@ -60,7 +60,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Setup Rust toolchain
-        run: rustup default ${{ matrix.channel }}
+        run: |-
+          rustup default ${{ matrix.channel }}
+          rustup component add clippy
       - uses: Swatinem/rust-cache@v2
 
       - name: Run lints (Clippy)
