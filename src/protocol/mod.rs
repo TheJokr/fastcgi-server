@@ -71,7 +71,7 @@ impl RecordHeader {
     /// Tests whether this [`RecordHeader`] represents a management record.
     #[inline]
     #[must_use]
-    pub fn is_management(&self) -> bool {
+    pub fn is_management(self) -> bool {
         self.rtype.is_management() && self.request_id == FCGI_NULL_REQUEST_ID
     }
 
@@ -105,8 +105,8 @@ impl RecordHeader {
         let mut buf = [0; Self::LEN];
         buf[0] = self.version.into();
         buf[1] = self.rtype.into();
-        buf[2..4].copy_from_slice(&u16::to_be_bytes(self.request_id));
-        buf[4..6].copy_from_slice(&u16::to_be_bytes(self.content_length));
+        buf[2..4].copy_from_slice(&self.request_id.to_be_bytes());
+        buf[4..6].copy_from_slice(&self.content_length.to_be_bytes());
         buf[6] = self.padding_length;
         buf
     }

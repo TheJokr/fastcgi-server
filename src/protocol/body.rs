@@ -123,7 +123,7 @@ impl EndRequest {
     #[must_use]
     pub fn to_bytes(self) -> [u8; Self::LEN] {
         let mut buf = [0; Self::LEN];
-        buf[..4].copy_from_slice(&u32::to_be_bytes(self.app_status));
+        buf[..4].copy_from_slice(&self.app_status.to_be_bytes());
         buf[4] = self.protocol_status.into();
         buf
     }
