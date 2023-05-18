@@ -75,13 +75,6 @@ impl RecordHeader {
         self.rtype.is_management() && self.request_id == FCGI_NULL_REQUEST_ID
     }
 
-    /// Tests whether this [`RecordHeader`] represents a stream record.
-    #[inline]
-    #[must_use]
-    pub fn is_stream(&self) -> bool {
-        self.rtype.is_stream()
-    }
-
     /// The number of bytes in the wire format of a [`RecordHeader`].
     pub const LEN: usize = 8;
 
