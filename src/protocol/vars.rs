@@ -147,7 +147,10 @@ mod tests {
 
         let mut buf = Vec::with_capacity(ProtocolVariables::RESPONSE_LEN.next_power_of_two());
         vars.write_response(&mut buf, &max_config);
-        assert_eq!(buf.len(), ProtocolVariables::RESPONSE_LEN);
+        assert_eq!(
+            ProtocolVariables::RESPONSE_LEN, buf.len(),
+            "ProtocolVariables::RESPONSE_LEN should be {}", buf.len(),
+        );
     }
 
     #[test]

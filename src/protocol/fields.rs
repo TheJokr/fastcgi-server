@@ -82,8 +82,8 @@ impl Role {
     /// after `current`.
     ///
     /// If `current` is [`None`], the first expected input stream type is
-    /// returned. Otherwise, `current` must be an input stream type. This is
-    /// verified by a debug assertion.
+    /// returned. Otherwise, `current` should be one of the input stream types
+    /// from `Role::input_streams`. This is verified by a debug assertion.
     ///
     /// A return value of [`None`] indicates that no further input streams are
     /// expected.
@@ -108,7 +108,10 @@ impl Role {
     #[must_use]
     pub fn next_input_stream(self, current: Option<RecordType>) -> Option<RecordType> {
         use RecordType::*;
-        debug_assert!(current.map_or(true, |s| self.input_streams().contains(&s)));
+        debug_assert!(
+            current.map_or(true, |s| self.input_streams().contains(&s)),
+            "{current:?} is not a valid input stream type for {self:?}",
+        );
         match (self, current) {
             (Self::Responder | Self::Filter, None) => Some(Stdin),
             (Self::Filter, Some(Stdin)) => Some(Data),
@@ -300,7 +303,7 @@ mod tests {
     #[test]
     fn reqflag_validate() {
         let flags = RequestFlags::all();
-        assert!(matches!(flags.validate(), Ok(())));
+        assert!(flags.validate().is_ok());
 
         let flags = RequestFlags::from(0x39);
         assert!(matches!(flags.validate(), Err(ProtocolError::UnknownFlags(0x38))));

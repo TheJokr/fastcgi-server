@@ -172,7 +172,7 @@ mod tests {
             assert_eq!(orig_nv.0, &*rt_nv.0);
             assert_eq!(orig_nv.1, &*rt_nv.1);
         }
-        assert!(matches!(orig_it.next(), None), "NVIter returned too few elements");
+        assert!(orig_it.next().is_none(), "NVIter returned too few elements");
 
         let rem = &*rt_it.into_inner();
         assert_eq!(rem.len(), 0, "NVIter did not consume all input: {rem:?}");
@@ -190,7 +190,7 @@ mod tests {
         for len in [0, 1, buf.len() / 3, buf.len() / 2, buf.len().saturating_sub(5)] {
             let trunc = &buf[..len];
             let mut it = NVIter::new(trunc);
-            assert_eq!(it.next(), None);
+            assert!(it.next().is_none());
             assert_eq!(it.into_inner(), trunc);
         }
 
@@ -198,7 +198,7 @@ mod tests {
         buf.extend_from_within(..extend_by);
         let mut it = NVIter::new(&*buf);
         assert_eq!(it.next(), Some(nv));
-        assert_eq!(it.next(), None);
+        assert!(it.next().is_none());
         assert_eq!(it.into_inner(), &buf[..extend_by]);
         Ok(())
     }

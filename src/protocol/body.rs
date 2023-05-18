@@ -200,7 +200,7 @@ mod tests {
         const BAD_FLAGS: [u8; 8] = [0x00, 0x01, 0xf7, 0x65, 0x5c, 0x91, 0x2d, 0x00];
         let bad_flags = BeginRequest::from_bytes(BAD_FLAGS)?;
         assert_eq!(bad_flags.role, Role::Responder);
-        assert_eq!(bad_flags.flags, RequestFlags::from_bits_retain(0xf7));
+        assert_eq!(bad_flags.flags.bits(), 0xf7);
         Ok(())
     }
 

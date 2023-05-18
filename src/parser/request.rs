@@ -121,24 +121,22 @@ mod tests {
 
         assert!(matches!(req.get_var(cgi::CONTENT_LENGTH.into()), Some(b"67828")));
         assert!(matches!(req.get_var("http_X_not_uTF8".into()), Some(BYTES)));
-        assert!(matches!(req.get_var("".into()), None));
-        assert!(matches!(req.get_var("Y)tdz(".into()), None));
+        assert!(req.get_var("".into()).is_none());
+        assert!(req.get_var("Y)tdz(".into()).is_none());
 
         assert!(matches!(req.get_var_str(cgi::HTTP_X_FORWARDED_PROTO.into()), Some("https")));
-        assert!(matches!(req.get_var_str("HTTP_X_NOT_UTF8".into()), None));
-        assert!(matches!(req.get_var_str("".into()), None));
-        assert!(matches!(req.get_var_str("x9rJb03ASGg45".into()), None));
+        assert!(req.get_var_str("HTTP_X_NOT_UTF8".into()).is_none());
+        assert!(req.get_var_str("".into()).is_none());
+        assert!(req.get_var_str("x9rJb03ASGg45".into()).is_none());
 
         let mut it = req.env_iter();
-        let mut len = it.len();
-        assert_eq!(len, req.env_len());
+        assert_eq!(it.len(), req.env_len());
+        assert_eq!(it.clone().count(), it.len());
         for (n, v) in &mut it {
             assert!(str_params().any(
                 |(refn, refv)| cgi::VarName::new(refn) == n.borrow() && refv == v
             ));
-            len -= 1;
         }
-        assert_eq!(len, 0);
-        assert!(matches!(it.next(), None));
+        assert!(it.next().is_none());
     }
 }
