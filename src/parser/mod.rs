@@ -162,14 +162,12 @@ macro_rules! to_array {
     ($s:ident, $inp:ident, $siz:expr) => {
         to_array!($s, $inp, 0, $siz)
     };
-    ($s:ident, $inp:ident, $off:expr, $siz:expr) => {{
-        let end = $off + $siz;
-        if $inp.len() < end {
-            return Break(($inp, $s.into_state()));
+    ($s:ident, $inp:ident, $off:expr, $siz:expr) => {
+        match $inp.get($off..($off + $siz)) {
+            Some(s) => <[u8; $siz]>::try_from(s).expect("slice should be same length as array"),
+            None => return Break(($inp, $s.into_state())),
         }
-        <[u8; $siz]>::try_from(&$inp[$off..end])
-            .expect("slice should be same length as array")
-    }};
+    };
 }
 
 macro_rules! fatal {
@@ -304,7 +302,7 @@ impl ParamsStateInner {
     /// case where a name-value pair is split between multiple Params stream
     /// records.
     ///
-    /// self.buffer **must** be non-empty before calling
+    /// self.buffer **must** not be empty when calling
     /// `ParamsStateInner::parse_buffered`!
     fn parse_buffered<'a>(&mut self, mut data: &'a mut [u8], rec_end: bool) -> &'a mut [u8] {
         // Move the length header (two VarInts) into the buffer
@@ -352,9 +350,9 @@ impl ParamsStateInner {
         // Unlike name, we treat value as raw bytes and can
         // thus easily compose it from multiple sources.
         let mut val = SmallBytes::with_capacity(val_len);
-        if self.buffer.len() > val_start {
+        if let Some(buffered @ [_, ..]) = self.buffer.get(val_start..) {
             // First, copy any value bytes left in self.buffer
-            val.extend_from_slice(&self.buffer[val_start..]);
+            val.extend_from_slice(buffered);
         }
         if let Some(missing @ 1..) = val_len.checked_sub(val.len()) {
             // Then, copy the remainder from the data slice. It
@@ -799,57 +797,54 @@ mod tests {
         \x0d\x01FCGI_MAX_REQS1\x0f\x01FCGI_MPXS_CONNS0\0\0\0\0\0";
 
     fn add_params<'a, I>(buf: &mut Vec<u8>, req_id: u16, params: I, lens: &[u16])
-    where I: Iterator<Item = (&'a [u8], &'a [u8])>,
+    where
+        I: Iterator<Item = (&'a [u8], &'a [u8])>,
     {
         let mut recs = lens.iter().copied();
-        let mut head_start = buf.len();
         let mut rem = recs.next().unwrap_or(u16::MAX);
-        buf.extend(fcgi::RecordHeader {
+        let mut head = fcgi::RecordHeader {
             version: fcgi::Version::V1, rtype: fcgi::RecordType::Params,
             request_id: req_id, content_length: rem, padding_length: 0,
-        }.to_bytes());
+        };
+
+        let mut head_start = buf.len();
+        buf.extend(head.to_bytes());
 
         for nv in params {
             let mut written = fcgi::nv::write(nv, &mut *buf).unwrap();
-            while written >= rem.into() {
+            while let Some(new_written) = written.checked_sub(rem.into()) {
                 // Splice a new header after end of previous' payload
-                written -= usize::from(rem);
-                head_start = buf.len() - written;
+                written = new_written;
                 rem = recs.next().unwrap_or(u16::MAX);
+                head.content_length = rem;
 
-                let head = fcgi::RecordHeader {
-                    version: fcgi::Version::V1, rtype: fcgi::RecordType::Params,
-                    request_id: req_id, content_length: rem, padding_length: 0,
-                }.to_bytes();
-                buf.splice(head_start..head_start, head);
+                head_start = buf.len() - written;
+                buf.splice(head_start..head_start, head.to_bytes());
             }
             rem -= written as u16;
         }
 
         // Fix up the payload length of the last header
-        let payload = u16::from_be_bytes([buf[head_start + 4], buf[head_start + 5]]);
-        let real_payload = payload - rem;
-        assert_eq!(head_start + 8, buf.len() - usize::from(real_payload));
-        buf[(head_start + 4)..(head_start + 6)].copy_from_slice(&real_payload.to_be_bytes());
+        head.content_length -= rem;
+        assert_eq!(head_start + 8, buf.len() - usize::from(head.content_length));
+        buf[head_start..(head_start + 8)].copy_from_slice(&head.to_bytes());
 
         // Add the stream end header (if necessary)
-        if real_payload != 0 {
-            buf.extend(fcgi::RecordHeader {
-                version: fcgi::Version::V1, rtype: fcgi::RecordType::Params,
-                request_id: req_id, content_length: 0, padding_length: 0,
-            }.to_bytes());
+        if head.content_length != 0 {
+            head.content_length = 0;
+            buf.extend(head.to_bytes());
         }
     }
 
     fn randomize_padding(buf: &mut Vec<u8>) {
         let mut head_start = 0;
-        while head_start + fcgi::RecordHeader::LEN <= buf.len() {
-            let payload = u16::from_be_bytes([buf[head_start + 4], buf[head_start + 5]]);
-            let old_pad = buf[head_start + 6];
+        while let Some(head) = buf.get_mut(head_start..(head_start + 8)) {
+            let payload = u16::from_be_bytes([head[4], head[5]]);
+            let old_pad = head[6];
             let new_pad = fastrand::u8(..);
-            buf[head_start + 6] = new_pad;
+            head[6] = new_pad;
 
-            head_start += fcgi::RecordHeader::LEN + usize::from(payload);
+            head_start += 8 + usize::from(payload);
             buf.splice(
                 head_start..(head_start + usize::from(old_pad)),
                 repeat_with(|| fastrand::u8(..)).take(new_pad.into()),
