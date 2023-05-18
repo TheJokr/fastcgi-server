@@ -64,19 +64,67 @@ impl From<Role> for u16 {
 }
 
 impl Role {
-    /// Tests whether the given [`RecordType`] is a valid stream record
-    /// for this [`Role`].
+    /// Returns the expected input stream [`RecordType`] values for this [`Role`].
+    ///
+    /// Input streams must be received one after the other in the order given
+    /// in the slice, according to the FastCGI specification.
     #[must_use]
-    pub fn is_stream_ok(self, record: RecordType) -> bool {
+    pub fn input_streams(self) -> &'static [RecordType] {
         use RecordType::*;
-        #[allow(clippy::match_like_matches_macro)]
-        match (self, record) {
-            (_, Params | Stderr) => true,
-            (Self::Responder, Stdin | Stdout) => true,
-            (Self::Authorizer, Stdout) => true,
-            (Self::Filter, Stdin | Data | Stdout) => true,
-            _ => false,
+        match self {
+            Self::Responder => &[Stdin],
+            Self::Authorizer => &[],
+            Self::Filter => &[Stdin, Data],
         }
+    }
+
+    /// Returns the next expected input stream [`RecordType`] for this [`Role`]
+    /// after `current`.
+    ///
+    /// If `current` is [`None`], the first expected input stream type is
+    /// returned. Otherwise, `current` must be an input stream type. This is
+    /// verified by a debug assertion.
+    ///
+    /// A return value of [`None`] indicates that no further input streams are
+    /// expected.
+    ///
+    /// # Examples
+    /// This function is equivalent to `next_stream` below, but more efficient.
+    /// ```
+    /// use fastcgi_server::protocol::{Role, RecordType};
+    /// fn next_stream(role: Role, current: Option<RecordType>) -> Option<RecordType> {
+    ///     let mut it = role.input_streams().iter().copied();
+    ///     if let Some(cur) = current {
+    ///         it.find(|&s| s == cur);
+    ///     }
+    ///     it.next()
+    /// }
+    ///
+    /// let role = Role::Filter;
+    /// let current = Some(RecordType::Stdin);
+    /// assert_eq!(role.next_input_stream(current), next_stream(role, current));
+    /// assert_eq!(role.next_input_stream(current), Some(RecordType::Data));
+    /// ```
+    #[must_use]
+    pub fn next_input_stream(self, current: Option<RecordType>) -> Option<RecordType> {
+        use RecordType::*;
+        debug_assert!(current.map_or(true, |s| self.input_streams().contains(&s)));
+        match (self, current) {
+            (Self::Responder | Self::Filter, None) => Some(Stdin),
+            (Self::Filter, Some(Stdin)) => Some(Data),
+            _ => None,
+        }
+    }
+
+    /// Returns the allowed output stream [`RecordType`] values for this [`Role`].
+    ///
+    /// The order is insignificant as output stream records may be mixed freely.
+    #[inline]
+    #[must_use]
+    pub fn output_streams(self) -> &'static [RecordType] {
+        use RecordType::*;
+        // Same for all standardized roles
+        &[Stdout, Stderr]
     }
 }
 
@@ -237,6 +285,7 @@ impl RecordType {
 
 #[cfg(test)]
 mod tests {
+    use strum::IntoEnumIterator;
     use super::*;
 
     #[test]
@@ -255,5 +304,17 @@ mod tests {
 
         let flags = RequestFlags::from(0x39);
         assert!(matches!(flags.validate(), Err(ProtocolError::UnknownFlags(0x38))));
+    }
+
+    #[test]
+    fn role_streams() {
+        for role in Role::iter() {
+            let mut state = None;
+            let comp: Vec<_> = std::iter::from_fn(|| {
+                state = role.next_input_stream(state);
+                state
+            }).fuse().collect();
+            assert_eq!(comp, role.input_streams());
+        }
     }
 }
