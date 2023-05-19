@@ -1,3 +1,4 @@
+use std::cmp::{max, min};
 use std::num::NonZeroU16;
 use std::ops::ControlFlow::{Break, Continue};
 
@@ -134,7 +135,7 @@ impl<T: WrapState> GetValuesState<T> {
         config: &Config,
     ) -> PResult<'a> {
         if self.payload_rem > 0 {
-            let len = data.len().min(self.payload_rem.into());
+            let len = min(data.len(), self.payload_rem.into());
             let mut nvit = fcgi::nv::NVIter::new(&mut data[..len]);
             self.vars.extend(
                 // Values in name-value pairs *should* be empty, so ignore them
@@ -401,7 +402,7 @@ impl ParamsStateInner {
 
         if rec_end && !data.is_empty() {
             // Reserve sufficient space for name-value pair's length header and name
-            self.buffer.reserve(data.len().max(64));
+            self.buffer.reserve(max(data.len(), 64));
             self.buffer.extend(&*data);
             len
         } else {
@@ -906,9 +907,7 @@ mod tests {
             // Randomly read between 50 and 256 bytes from the input
             // to stress the parser's continuation capabilities
             let buf = parser.get_input_buffer();
-            let min_len = buf.len().min(50);
-            let max_len = buf.len().min(256);
-            let rand_len = fastrand::usize(min_len..=max_len);
+            let rand_len = min(buf.len(), fastrand::usize(50..=256));
             let read = input.read(&mut buf[..rand_len]).unwrap();
 
             let status = parser.parse(read);

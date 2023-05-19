@@ -319,7 +319,7 @@ mod tests {
         }
 
         fastrand::shuffle(&mut static_vars);
-        let mut chunks = static_vars.chunks(2);
+        let mut chunks = static_vars.chunks_exact(2);
         while let Some([v1, v2]) = chunks.next() {
             assert_ne!(v1, v2);
             assert_ne!(v1.as_var(), v2.as_var());
