@@ -45,17 +45,6 @@ impl VarInt {
             w.write_all(&e).and(Ok(e.len()))
         }
     }
-
-    /// Converts the [`VarInt`] into a [`usize`], saturating at [`usize::MAX`].
-    ///
-    /// On lower-end platforms, [`usize`] may be smaller than [`u32`]. Saturating
-    /// in these cases is useful for indexing, which is bounded by [`usize::MAX`]
-    /// because of addressing limitations anyway.
-    #[inline]
-    #[must_use]
-    pub fn to_usize(self) -> usize {
-        usize::try_from(self.0).unwrap_or(usize::MAX)
-    }
 }
 
 impl From<VarInt> for u32 {
@@ -63,6 +52,20 @@ impl From<VarInt> for u32 {
     #[inline]
     fn from(v: VarInt) -> Self {
         v.0
+    }
+}
+
+impl TryFrom<VarInt> for usize {
+    type Error = std::num::TryFromIntError;
+
+    /// Extracts the contained [`u32`] as a [`usize`], unless the [`u32`] is
+    /// too large.
+    ///
+    /// # Errors
+    /// Returns an error if the contained [`u32`] does not fit into a [`usize`].
+    #[inline]
+    fn try_from(v: VarInt) -> Result<Self, Self::Error> {
+        v.0.try_into()
     }
 }
 
@@ -142,10 +145,8 @@ mod tests {
             assert!(matches!(fail, Err(ProtocolError::InvalidVarInt)));
         }
 
-        if usize::try_from(VarInt::MAX.0).is_err() {
-            // usize::MAX < VarInt::MAX
-            assert_eq!(VarInt::MAX.to_usize(), usize::MAX);
-        }
+        // If usize::MAX < VarInt::MAX, this verifies that the same error is returned
+        assert_eq!(usize::try_from(VarInt::MAX), usize::try_from(VarInt::MAX.0));
     }
 
     #[test]

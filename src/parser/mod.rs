@@ -91,16 +91,23 @@ struct SkipState<T> {
 
 impl<T: WrapState> SkipState<T> {
     fn drive(mut self, data: &mut [u8]) -> PResult<'_> {
-        let total = usize::from(self.payload_rem).saturating_add(self.padding_rem.into());
-        if data.len() >= total {
-            Continue((&mut data[total..], self.next.into_state()))
-        } else if data.len() > self.payload_rem.into() {
-            self.padding_rem -= (data.len() - usize::from(self.payload_rem)) as u8;
+        let payload = usize::from(self.payload_rem);
+        let (total, overflow) = match payload.checked_add(self.padding_rem.into()) {
+            Some(t) => (t, false),
+            None => (payload, true),
+        };
+
+        if let Some(new_payload_rem @ 1..) = payload.checked_sub(data.len()) {
+            self.payload_rem = new_payload_rem as u16;
+            Break((&mut [], T::wrap_skip(self)))
+        } else if overflow || data.len() < total {
+            // data.len() < payload + self.padding_rem holds here regardless of overflow.
+            // Thus, data.len() - payload < self.padding_rem (u8) and the cast is safe.
+            self.padding_rem -= (data.len() - payload) as u8;
             self.payload_rem = 0;
             Break((&mut [], T::wrap_skip(self)))
-        } else {
-            self.payload_rem -= data.len() as u16;
-            Break((&mut [], T::wrap_skip(self)))
+        } else /* data.len() >= total */ {
+            Continue((&mut data[total..], self.next.into_state()))
         }
     }
 }
@@ -313,25 +320,30 @@ impl ParamsStateInner {
 
         let mut cur = &*self.buffer;
         let name_len = fcgi::varint::VarInt::read(&mut cur)
-            .expect("both VarInts should be in the buffer").to_usize();
+            .expect("both VarInts should be in the buffer");
         let val_len = fcgi::varint::VarInt::read(&mut cur)
-            .expect("both VarInts should be in the buffer").to_usize();
-        debug_assert_eq!(head_len, self.buffer.len() - cur.len());
+            .expect("both VarInts should be in the buffer");
 
-        let head_len = self.buffer.len() - cur.len();
-        let val_start = head_len.saturating_add(name_len);
-        let total_len = val_start.saturating_add(val_len);
+        let body_buffered = cur.len();
+        debug_assert_eq!(head_len, self.buffer.len() - body_buffered);
+        let head_len = self.buffer.len() - body_buffered;
+
+        let (name_len, val_len, val_start, body_len) = (|| {
+            let name_len = name_len.try_into().ok()?;
+            let val_len = val_len.try_into().ok()?;
+            let val_start = head_len.checked_add(name_len)?;
+            let body_len = name_len.checked_add(val_len)?;
+            Some((name_len, val_len, val_start, body_len))
+        })().expect("name-value pair overflowed usize");
 
         // Wait for sufficient data to extract both name and value
-        let avail = self.buffer.len().saturating_add(data.len());
-        if avail < total_len {
+        if body_buffered.saturating_add(data.len()) < body_len {
             if rec_end {
                 self.buffer.extend(&*data);
                 return &mut [];
             }
             return data;
         }
-        debug_assert!(self.buffer.len() >= head_len);
 
         let name = if self.buffer.len() == head_len {
             // Name is fully contained in the data slice. Since we moved the
@@ -653,9 +665,11 @@ impl<'a> Parser<'a> {
         // - fcgi::RecordHeader::LEN + fcgi::body::BeginRequest::LEN (16)
         // - Longest expected GetValues name-value pair (17)
         const MIN_INPUT: usize = 24;
-        let buffer_size = buffer_size.max(MIN_INPUT);
-        // Align to multiple of 8 bytes to match FastCGI recommended padding
-        let buffer_size = (buffer_size + 7) & !7;
+        let buffer_size = match buffer_size {
+            ..=MIN_INPUT => MIN_INPUT,
+            // Align to multiple of 8 bytes to match FastCGI recommended padding
+            s => s.checked_add(7).map_or(s, |r| r & !7),
+        };
 
         Self {
             config,

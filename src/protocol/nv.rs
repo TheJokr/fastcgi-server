@@ -36,10 +36,10 @@ impl<T: Bytes> Iterator for NVIter<T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut cur = &*self.data;
-        let name_len = VarInt::read(&mut cur).ok()?.to_usize();
-        let val_len = VarInt::read(&mut cur).ok()?.to_usize();
+        let name_len = VarInt::read(&mut cur).ok()?.try_into().ok()?;
+        let val_len = VarInt::read(&mut cur).ok()?.try_into().ok()?;
         let head_len = self.data.len() - cur.len();
-        let total_len = head_len.saturating_add(name_len).saturating_add(val_len);
+        let total_len = head_len.checked_add(name_len)?.checked_add(val_len)?;
 
         if self.data.len() >= total_len {
             let mut nv = self.data.split_head(total_len);
