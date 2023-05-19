@@ -2,45 +2,43 @@ use std::ops::Deref;
 
 
 /// An extension trait for byte slices that is generic over mutability.
-pub trait Bytes: Deref<Target = [u8]> {
-    /// Moves the head of the slice by `n` bytes.
+pub trait Bytes: Sized + Deref<Target = [u8]> {
+    /// Moves the start of the slice forwards by `n` bytes.
     ///
     /// # Panics
-    /// Panics if `n` exceeds the slice's length. This may leave the slice
-    /// in a fallback state.
-    fn advance_by(&mut self, n: usize);
+    /// Panics if `n` exceeds the slice's length.
+    #[must_use]
+    fn advance_by(self, n: usize) -> Self;
 
-    /// Splits off and returns the first `len` bytes of the slice.
+    /// Divides the slice into two at index `mid`.
     ///
-    /// `self` contains the remaining bytes afterwards.
+    /// `&self[mid]` becomes the first element of the second slice.
     ///
     /// # Panics
-    /// Panics if `len` exceeds the slice's length. This may leave the slice
-    /// in a fallback state.
-    fn split_head(&mut self, len: usize) -> Self;
+    /// Panics if `mid` exceeds the slice's length.
+    #[must_use]
+    fn split_at(self, mid: usize) -> (Self, Self);
 }
 
 impl Bytes for &[u8] {
     #[inline]
-    fn advance_by(&mut self, n: usize) {
-        *self = &self[n..];
+    fn advance_by(self, n: usize) -> Self {
+        &self[n..]
     }
     #[inline]
-    fn split_head(&mut self, len: usize) -> Self {
-        let head;
-        (head, *self) = self.split_at(len);
-        head
+    fn split_at(self, mid: usize) -> (Self, Self) {
+        self.split_at(mid)
     }
 }
 
 impl Bytes for &mut [u8] {
     #[inline]
-    fn advance_by(&mut self, n: usize) {
-        replace_with::replace_with(self, || &mut [], |s| &mut s[n..]);
+    fn advance_by(self, n: usize) -> Self {
+        &mut self[n..]
     }
     #[inline]
-    fn split_head(&mut self, len: usize) -> Self {
-        replace_with::replace_with_and_return(self, || &mut [], |s| s.split_at_mut(len))
+    fn split_at(self, mid: usize) -> (Self, Self) {
+        self.split_at_mut(mid)
     }
 }
 
@@ -54,10 +52,11 @@ mod tests {
     #[test]
     fn shared() {
         let mut bytes = REF;
-        bytes.advance_by(20);
+        bytes = bytes.advance_by(20);
         assert_eq!(bytes, &REF[20..]);
 
-        let head = bytes.split_head(7);
+        let head;
+        (head, bytes) = bytes.split_at(7);
         assert_eq!(head, &REF[20..27]);
         assert_eq!(bytes, &REF[27..]);
     }
@@ -66,10 +65,11 @@ mod tests {
     fn exclusive() {
         let mut buf = REF.to_owned();
         let mut bytes = &mut *buf;
-        bytes.advance_by(25);
+        bytes = bytes.advance_by(25);
         assert_eq!(bytes, &REF[25..]);
 
-        let head = bytes.split_head(20);
+        let head;
+        (head, bytes) = bytes.split_at(20);
         assert_eq!(head, &REF[25..45]);
         assert_eq!(bytes, &REF[45..]);
     }

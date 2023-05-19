@@ -42,10 +42,11 @@ impl<T: Bytes> Iterator for NVIter<T> {
         let total_len = head_len.checked_add(name_len)?.checked_add(val_len)?;
 
         if self.data.len() >= total_len {
-            let mut nv = self.data.split_head(total_len);
-            nv.advance_by(head_len);
-            let name = nv.split_head(name_len);
-            Some((name, nv))
+            // Cannot panic, so replace_with_or_abort is fine
+            let nv = replace_with::replace_with_or_abort_and_return(
+                &mut self.data, |b| b.split_at(total_len),
+            );
+            Some(nv.advance_by(head_len).split_at(name_len))
         } else {
             None
         }
