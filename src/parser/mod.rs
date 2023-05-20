@@ -792,10 +792,7 @@ mod tests {
     }
 
     fn add_abort(buf: &mut Vec<u8>, req_id: u16) {
-        buf.extend(fcgi::RecordHeader {
-            version: fcgi::Version::V1, rtype: fcgi::RecordType::AbortRequest,
-            request_id: req_id, content_length: 0, padding_length: 0,
-        }.to_bytes());
+        buf.extend(fcgi::RecordHeader::new(fcgi::RecordType::AbortRequest, req_id).to_bytes());
     }
 
     fn add_get_vals(buf: &mut Vec<u8>, req_id: u16) {

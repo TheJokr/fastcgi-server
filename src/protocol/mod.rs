@@ -68,11 +68,46 @@ pub struct RecordHeader {
 }
 
 impl RecordHeader {
+    /// Creates a new [`RecordHeader`] with [`Version::V1`] and all
+    /// lengths set to 0.
+    ///
+    /// This function is intended to be used together with
+    /// `RecordHeader::set_lengths` if the record should have a body.
+    #[inline]
+    #[must_use]
+    pub fn new(rtype: RecordType, request_id: u16) -> Self {
+        Self { version: Version::V1, rtype, request_id, content_length: 0, padding_length: 0 }
+    }
+
+    /// Sets `content_length` and automatically calculates an
+    /// appropriate `padding_length`.
+    ///
+    /// Up to 7 bytes of padding are used such that
+    /// `content_length + padding_length` is a multiple of 8. This is the amount
+    /// recommended by the FastCGI specification.
+    #[inline]
+    pub fn set_lengths(&mut self, content_length: u16) {
+        self.content_length = content_length;
+        let mut padding = content_length % 8;
+        if padding > 0 {
+            padding = 8 - padding;
+        }
+        self.padding_length = padding as u8;
+    }
+
     /// Tests whether this [`RecordHeader`] represents a management record.
     #[inline]
     #[must_use]
     pub fn is_management(self) -> bool {
         self.rtype.is_management() && self.request_id == FCGI_NULL_REQUEST_ID
+    }
+
+    /// Returns a slice of `self.padding_length` zero bytes to be used as padding.
+    #[inline]
+    #[must_use]
+    pub fn padding_bytes(self) -> &'static [u8] {
+        static PADDING: [u8; u8::MAX as usize] = [0; u8::MAX as usize];
+        &PADDING[..self.padding_length.into()]
     }
 
     /// The number of bytes in the wire format of a [`RecordHeader`].
@@ -108,6 +143,7 @@ impl RecordHeader {
 
 #[cfg(test)]
 mod tests {
+    use std::iter::repeat_with;
     use strum::IntoEnumIterator;
     use super::*;
 
@@ -168,5 +204,23 @@ mod tests {
         assert!(!head.is_management());
         head.request_id = fastrand::u16(1..);
         assert!(!head.is_management());
+    }
+
+    #[test]
+    fn padding() {
+        let head = RecordHeader {
+            version: Version::V1, rtype: RecordType::Unknown, request_id: 1965,
+            content_length: 4982, padding_length: 177,
+        };
+        assert_eq!(head.padding_bytes(), &[0; 177]);
+
+        for len in repeat_with(|| fastrand::u16(..)).take(20) {
+            for off in 0..8 {
+                let mut head = RecordHeader::new(RecordType::Stdin, 6893);
+                head.set_lengths(len + off);
+                let body_len = u32::from(head.content_length) + u32::from(head.padding_length);
+                assert_eq!(body_len % 8, 0, "record body is not 8-byte aligned");
+            }
+        }
     }
 }

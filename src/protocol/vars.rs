@@ -1,7 +1,7 @@
 use compact_str::{CompactString, ToCompactString};
 
 use super::Error as ProtocolError;
-use super::{nv, RecordHeader, RecordType, Version, FCGI_NULL_REQUEST_ID};
+use super::{nv, RecordHeader, RecordType, FCGI_NULL_REQUEST_ID};
 use crate::Config;
 
 
@@ -65,19 +65,13 @@ impl ProtocolVariables {
                 .expect("writing into Vec<u8> should always succeed");
         }
 
-        // Specification recommends padding to multiple of 8 bytes
-        let mut padding = len % 8;
-        if padding > 0 {
-            padding = 8 - padding;
-            out.extend(&[0; 7][..padding]);
-        }
-
-        let head = RecordHeader {
-            version: Version::V1, rtype: RecordType::GetValuesResult,
-            request_id: FCGI_NULL_REQUEST_ID, content_length: len as u16,
-            padding_length: padding as u8,
-        }.to_bytes();
-        out[start..(start + RecordHeader::LEN)].copy_from_slice(&head);
+        // GetValuesResult is not a stream, so its name-value pairs must fit
+        // into a single record body per the specification. This means len can
+        // safely be cast to a u16.
+        let mut head = RecordHeader::new(RecordType::GetValuesResult, FCGI_NULL_REQUEST_ID);
+        head.set_lengths(len as u16);
+        out.extend(head.padding_bytes());
+        out[start..(start + RecordHeader::LEN)].copy_from_slice(&head.to_bytes());
     }
 }
 
