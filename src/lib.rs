@@ -43,7 +43,7 @@ pub struct Config {
 }
 
 impl Config {
-    /// Create a new [`Config`] with all settings set to their documented defaults.
+    /// Creates a new [`Config`] with all settings set to their documented defaults.
     #[must_use = "Creating a Config is not free and has no side effects"]
     pub fn new() -> Self {
         let concurrency = std::thread::available_parallelism()
