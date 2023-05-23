@@ -1,4 +1,7 @@
-use std::ops::Deref;
+use std::io::Write;
+use std::ops::{Deref, DerefMut};
+
+use smallvec::SmallVec;
 
 
 /// An extension trait for byte slices that is generic over mutability.
@@ -43,6 +46,27 @@ impl Bytes for &mut [u8] {
 }
 
 
+/// A trait for generic abstraction over [`Vec<u8>`]-like types.
+pub trait BytesVec: DerefMut<Target = [u8]> + Write {
+    /// Copies and appends all bytes from `other` to this [`BytesVec`] in-order.
+    fn extend_from_slice(&mut self, other: &[u8]);
+}
+
+impl BytesVec for Vec<u8> {
+    #[inline]
+    fn extend_from_slice(&mut self, other: &[u8]) {
+        self.extend(other);
+    }
+}
+
+impl<const N: usize> BytesVec for SmallVec<[u8; N]> {
+    #[inline]
+    fn extend_from_slice(&mut self, other: &[u8]) {
+        self.extend_from_slice(other);
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -50,7 +74,7 @@ mod tests {
     const REF: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
     #[test]
-    fn shared() {
+    fn bytes_shared() {
         let mut bytes = REF;
         bytes = bytes.advance_by(20);
         assert_eq!(bytes, &REF[20..]);
@@ -62,7 +86,7 @@ mod tests {
     }
 
     #[test]
-    fn exclusive() {
+    fn bytes_exclusive() {
         let mut buf = REF.to_owned();
         let mut bytes = &mut *buf;
         bytes = bytes.advance_by(25);
@@ -72,5 +96,16 @@ mod tests {
         (head, bytes) = bytes.split_at(20);
         assert_eq!(head, &REF[25..45]);
         assert_eq!(bytes, &REF[45..]);
+    }
+
+    #[test]
+    fn bytesvec() {
+        let mut v = Vec::from(&REF[..26]);
+        BytesVec::extend_from_slice(&mut v, &REF[26..]);
+        assert_eq!(v, REF);
+
+        let mut sv = <SmallVec<[u8; REF.len()]>>::from_slice(&REF[..26]);
+        BytesVec::extend_from_slice(&mut sv, &REF[26..]);
+        assert_eq!(sv.as_ref(), REF);
     }
 }
