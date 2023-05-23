@@ -2,6 +2,7 @@ use compact_str::{CompactString, ToCompactString};
 
 use super::Error as ProtocolError;
 use super::{nv, RecordHeader, RecordType, FCGI_NULL_REQUEST_ID};
+use crate::ext::BytesVec;
 use crate::Config;
 
 
@@ -45,13 +46,17 @@ impl ProtocolVariables {
     /// record emitted by `ProtocolVariables::write_response`.
     pub const RESPONSE_LEN: usize = 104;
 
-    /// Appends a `GetValuesResult` record in wire format to the [`Vec<u8>`]
-    /// based on variable names from this [`ProtocolVariables`] set and variable
-    /// values from the [`Config`].
-    pub fn write_response(self, out: &mut Vec<u8>, config: &Config) {
+    /// Appends a `GetValuesResult` record in wire format to the [`BytesVec`].
+    ///
+    /// Variable names are taken from this [`ProtocolVariables`] set. The
+    /// corresponding values are inferred from the [`Config`].
+    ///
+    /// The canonical [`BytesVec`] implementation is [`Vec<u8>`], but there may
+    /// also be other implementors. See the trait documentation for details.
+    pub fn write_response<V: BytesVec>(self, out: &mut V, config: &Config) {
         // Reserve space for the header in out, which may already contain data
         let start = out.len();
-        out.extend([0; RecordHeader::LEN]);
+        out.extend_from_slice(&[0; RecordHeader::LEN]);
         let mut len = 0;
 
         for (name, var) in self.iter_names() {
@@ -62,7 +67,7 @@ impl ProtocolVariables {
             };
             // name and value are guaranteed to fit into a VarInt here
             len += nv::write((name.as_bytes(), value.as_bytes()), &mut *out)
-                .expect("writing into Vec<u8> should always succeed");
+                .expect("writing into BytesVec should always succeed");
         }
 
         // GetValuesResult is not a stream, so its name-value pairs must fit
@@ -70,7 +75,7 @@ impl ProtocolVariables {
         // safely be cast to a u16.
         let mut head = RecordHeader::new(RecordType::GetValuesResult, FCGI_NULL_REQUEST_ID);
         head.set_lengths(len as u16);
-        out.extend(head.padding_bytes());
+        out.extend_from_slice(head.padding_bytes());
         out[start..(start + RecordHeader::LEN)].copy_from_slice(&head.to_bytes());
     }
 }
@@ -78,6 +83,7 @@ impl ProtocolVariables {
 
 #[cfg(test)]
 mod tests {
+    use smallvec::SmallVec;
     use super::*;
 
     #[test]
@@ -154,8 +160,13 @@ mod tests {
         let vars = ProtocolVariables::all();
         let config = Config { max_conns: 183.try_into().unwrap() };
 
-        let mut buf = Vec::with_capacity(ProtocolVariables::RESPONSE_LEN);
-        vars.write_response(&mut buf, &config);
-        assert_eq!(buf, REF);
+        let mut heap = Vec::with_capacity(ProtocolVariables::RESPONSE_LEN);
+        vars.write_response(&mut heap, &config);
+        assert_eq!(heap, REF);
+
+        let mut stack = <SmallVec<[u8; ProtocolVariables::RESPONSE_LEN]>>::new();
+        vars.write_response(&mut stack, &config);
+        assert!(!stack.spilled());
+        assert_eq!(stack.as_ref(), REF);
     }
 }
