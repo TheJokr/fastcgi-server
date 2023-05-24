@@ -53,7 +53,7 @@ impl ProtocolVariables {
     ///
     /// The canonical [`BytesVec`] implementation is [`Vec<u8>`], but there may
     /// also be other implementors. See the trait documentation for details.
-    pub fn write_response<V: BytesVec>(self, out: &mut V, config: &Config) {
+    pub fn write_response<V: BytesVec>(self, out: &mut V, config: &Config) -> usize {
         // Reserve space for the header in out, which may already contain data
         let start = out.len();
         out.extend_from_slice(&[0; RecordHeader::LEN]);
@@ -77,6 +77,7 @@ impl ProtocolVariables {
         head.set_lengths(len as u16);
         out.extend_from_slice(head.padding_bytes());
         out[start..(start + RecordHeader::LEN)].copy_from_slice(&head.to_bytes());
+        out.len() - start
     }
 }
 
@@ -146,11 +147,12 @@ mod tests {
         let max_config = Config { max_conns: usize::MAX.try_into().unwrap() };
 
         let mut buf = Vec::with_capacity(ProtocolVariables::RESPONSE_LEN.next_power_of_two());
-        vars.write_response(&mut buf, &max_config);
+        let written = vars.write_response(&mut buf, &max_config);
         assert_eq!(
             ProtocolVariables::RESPONSE_LEN, buf.len(),
             "ProtocolVariables::RESPONSE_LEN should be {}", buf.len(),
         );
+        assert_eq!(written, buf.len());
     }
 
     #[test]
@@ -161,12 +163,16 @@ mod tests {
         let config = Config { max_conns: 183.try_into().unwrap() };
 
         let mut heap = Vec::with_capacity(ProtocolVariables::RESPONSE_LEN);
-        vars.write_response(&mut heap, &config);
-        assert_eq!(heap, REF);
+        heap.extend([0x7d; 8]);  // some existing data
+        let written = vars.write_response(&mut heap, &config);
+        assert_eq!(heap.len(), 8 + REF.len());
+        assert_eq!(&heap[8..], REF);
+        assert_eq!(written, REF.len());
 
         let mut stack = <SmallVec<[u8; ProtocolVariables::RESPONSE_LEN]>>::new();
-        vars.write_response(&mut stack, &config);
+        let written = vars.write_response(&mut stack, &config);
         assert!(!stack.spilled());
         assert_eq!(stack.as_ref(), REF);
+        assert_eq!(written, REF.len());
     }
 }
