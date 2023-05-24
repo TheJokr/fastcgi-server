@@ -189,7 +189,6 @@ macro_rules! try_head {
         let head = to_array!($s, $inp, fcgi::RecordHeader::LEN);
         match fcgi::RecordHeader::from_bytes(head) {
             Ok(h) => h,
-            Err(fcgi::Error::UnknownVersion(v)) => fatal!($inp, Error::UnknownVersion(v)),
             Err(fcgi::Error::UnknownRecordType(rtype)) => {
                 let request_id = u16::from_be_bytes([head[2], head[3]]);
                 let payload = u16::from_be_bytes([head[4], head[5]]);
@@ -201,6 +200,7 @@ macro_rules! try_head {
                 let skip = $s.into_skip(payload, padding);
                 return Continue((&mut $inp[fcgi::RecordHeader::LEN..], skip));
             },
+            Err(fcgi::Error::UnknownVersion(v)) => fatal!($inp, Error::UnknownVersion(v)),
             Err(e) => fatal!($inp, Error::Protocol(e)),
         }
     }};
@@ -448,33 +448,6 @@ impl ParamsState {
         let req_id = self.inner.req.request_id.get();
 
         match head.rtype {
-            fcgi::RecordType::BeginRequest if head.request_id != req_id => {
-                // Report lack of multiplexing to remote
-                out.extend(fcgi::body::EndRequest {
-                    protocol_status: fcgi::ProtocolStatus::CantMpxConn,
-                    app_status: 0,
-                }.to_record(head.request_id));
-                // Skip record body
-                let skip = self.into_skip(head.content_length, head.padding_length);
-                Continue((data, skip))
-            },
-            fcgi::RecordType::AbortRequest if head.request_id == req_id => {
-                // Report that request was aborted to remote
-                out.extend(fcgi::body::EndRequest {
-                    protocol_status: fcgi::ProtocolStatus::RequestComplete,
-                    app_status: 0,
-                }.to_record(req_id));
-                // Return to initial HeaderState
-                let initial = HeaderState.into_skip(head.content_length, head.padding_length);
-                Continue((data, initial))
-            },
-
-            fcgi::RecordType::GetValues if head.is_management() => {
-                // Transition to GetValuesState for body
-                let next = self.inner;
-                let vals = GetValuesState::new(next, head.content_length, head.padding_length);
-                Continue((data, State::ParamsValues(vals)))
-            },
             fcgi::RecordType::Params if head.request_id == req_id => {
                 if head.content_length == 0 {
                     // Params stream is finished, now return the parsed Request.
@@ -487,6 +460,33 @@ impl ParamsState {
                 self.payload_rem = head.content_length;
                 self.padding_rem = head.padding_length;
                 Continue((data, self.into_state()))
+            },
+            fcgi::RecordType::AbortRequest if head.request_id == req_id => {
+                // Report that request was aborted to remote
+                out.extend(fcgi::body::EndRequest {
+                    protocol_status: fcgi::ProtocolStatus::RequestComplete,
+                    app_status: 0,
+                }.to_record(req_id));
+                // Return to initial HeaderState
+                let initial = HeaderState.into_skip(head.content_length, head.padding_length);
+                Continue((data, initial))
+            },
+
+            fcgi::RecordType::BeginRequest if head.request_id != req_id => {
+                // Report lack of multiplexing to remote
+                out.extend(fcgi::body::EndRequest {
+                    protocol_status: fcgi::ProtocolStatus::CantMpxConn,
+                    app_status: 0,
+                }.to_record(head.request_id));
+                // Skip record body
+                let skip = self.into_skip(head.content_length, head.padding_length);
+                Continue((data, skip))
+            },
+            fcgi::RecordType::GetValues if head.is_management() => {
+                // Transition to GetValuesState for body
+                let next = self.inner;
+                let vals = GetValuesState::new(next, head.content_length, head.padding_length);
+                Continue((data, State::ParamsValues(vals)))
             },
             _ => {
                 // Skip unexpected record types
