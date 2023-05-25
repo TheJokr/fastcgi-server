@@ -21,7 +21,7 @@ impl VarInt {
     /// Any errors from [`Read::read_exact`] are forwarded to the caller.
     pub fn read(mut r: impl Read) -> io::Result<Self> {
         let mut buf = [0u8; 4];
-        r.read_exact(&mut buf[0..1])?;
+        r.read_exact(&mut buf[..1])?;
         if buf[0] & Self::LONG_BIT == 0 {
             return Ok(buf[0].into());
         }
