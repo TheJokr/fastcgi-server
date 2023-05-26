@@ -29,7 +29,7 @@ pub mod parser;
 /// The central configuration for [`fastcgi_server`](crate).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Config {
-    /// The maximum number of concurrent FastCGI connections to the client.
+    /// The maximum number of concurrent FastCGI connections from the client.
     ///
     /// This parameter effectively defines the maximum amount of concurrency
     /// this crate will exhibit. Each connection supports one request at a time
