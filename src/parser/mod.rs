@@ -60,6 +60,28 @@ pub enum Error {
 }
 
 
+/// Buffer size to balance syscall overhead with memory usage.
+const DEFAULT_BUF_SIZE: usize = 8192;
+
+/// Aligns `bufsize` upwards according to FastCGI recommendations.
+#[inline]
+#[must_use]
+const fn aligned_buf_size(bufsize: usize) -> usize {
+    // Minimum buffer size required for statically-known parsing units
+    // - fcgi::RecordHeader::LEN + fcgi::body::BeginRequest::LEN (16)
+    // - Longest expected GetValues name-value pair (17)
+    const MIN_BUF_SIZE: usize = 24;
+    if bufsize <= MIN_BUF_SIZE {
+        return MIN_BUF_SIZE;
+    }
+    // Align to multiple of 8 bytes to match FastCGI recommended padding
+    match bufsize.checked_add(7) {
+        Some(r) => r & !7,
+        None => bufsize,
+    }
+}
+
+
 const SMALLVEC_BASE_SIZE: usize = std::mem::size_of::<SmallVec<[u8; 0]>>();
 // Maximum number of inline bytes before SmallVec exceeds SMALLVEC_BASE_SIZE.
 // This derives from SmallVec's layout, which uses 1 usize as discriminant.
@@ -143,6 +165,7 @@ impl Request {
 #[cfg(test)]
 mod tests {
     use std::borrow::Borrow;
+    use std::iter::repeat_with;
     use super::*;
 
     pub(super) const BYTES: &[u8] = b"\x1f\x9a\xdaM\xeb\x82U\xb8\xfe\xf4\xb0\xc7\x80\x95\xc6\
@@ -168,7 +191,24 @@ mod tests {
     }
 
     #[test]
-    fn env() {
+    fn buf_size() {
+        const BEGIN_REC_LEN: usize = fcgi::RecordHeader::LEN + fcgi::body::BeginRequest::LEN;
+        let (max_var, _) =
+            fcgi::ProtocolVariables::all().iter_names().max_by_key(|(n, _)| n.len()).unwrap();
+        let max_var_nv = fcgi::nv::write((max_var.as_bytes(), b""), std::io::sink()).unwrap();
+
+        assert!(aligned_buf_size(0) >= BEGIN_REC_LEN);
+        assert!(aligned_buf_size(0) >= max_var_nv);
+        assert_eq!(aligned_buf_size(DEFAULT_BUF_SIZE), DEFAULT_BUF_SIZE);
+
+        let rand_size = repeat_with(|| fastrand::usize(..)).take(50);
+        for s in rand_size.chain([0, 1, 50, 255, DEFAULT_BUF_SIZE]) {
+            assert_eq!(aligned_buf_size(s) % 8, 0);
+        }
+    }
+
+    #[test]
+    fn req_env() {
         let body = fcgi::body::BeginRequest {
             role: fcgi::Role::Responder,
             flags: fcgi::RequestFlags::all(),

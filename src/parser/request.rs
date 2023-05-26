@@ -594,10 +594,10 @@ impl<'a> Parser<'a> {
     /// buffer size.
     ///
     /// The default size is suitable for most FastCGI clients and balances
-    /// overheads with throughput.
+    /// overheads with memory usage.
     #[inline]
     pub fn new(config: &'a Config) -> Self {
-        Self::with_buffer(8192, config)
+        Self::with_buffer(super::DEFAULT_BUF_SIZE, config)
     }
 
     /// Creates a new [`Parser`] with the given configuration and input buffer
@@ -610,16 +610,7 @@ impl<'a> Parser<'a> {
     /// both the header's name and value). In practice, the default size used
     /// by `Parser::new` is a good starting point.
     pub fn with_buffer(buffer_size: usize, config: &'a Config) -> Self {
-        // Minimum buffer size required for statically-known parsing units
-        // - fcgi::RecordHeader::LEN + fcgi::body::BeginRequest::LEN (16)
-        // - Longest expected GetValues name-value pair (17)
-        const MIN_INPUT: usize = 24;
-        let buffer_size = match buffer_size {
-            ..=MIN_INPUT => MIN_INPUT,
-            // Align to multiple of 8 bytes to match FastCGI recommended padding
-            s => s.checked_add(7).map_or(s, |r| r & !7),
-        };
-
+        let buffer_size = super::aligned_buf_size(buffer_size);
         Self {
             config,
             input: vec![0; buffer_size].into_boxed_slice(),
