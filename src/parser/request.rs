@@ -542,8 +542,9 @@ pub struct Yield<'a> {
     /// Indicates whether the [`Parser`] reached a final parsing state.
     ///
     /// If `true`, future calls to `Parser::parse` do not change the state of the
-    /// parser any further. The parser's result, either a [`RequestData`] or an
-    /// [`Error`], may be retrieved via `Parser::into_request`.
+    /// parser any further. The parser's result, either a [`Request`] with
+    /// leftover input or an [`Error`], may be retrieved via
+    /// `Parser::into_request`.
     ///
     /// Otherwise, the parser yielded to the caller to request additional input.
     /// Input must be supplied into the slice returned by `Parser::input_buffer`
@@ -556,15 +557,6 @@ pub struct Yield<'a> {
     /// FastCGI client *before* the next call to `Parser::parse`. The underlying
     /// buffer will be overwritten by future calls to `Parser::parse`.
     pub output: &'a [u8],
-}
-
-/// A combination of a [`Request`] and leftover data from a [`Parser`].
-#[derive(Debug, Clone)]
-pub struct RequestData {
-    /// The complete [`Request`] parsed by the [`Parser`].
-    pub request: Request,
-    /// The leftover input bytes in the [`Parser`]'s internal buffer.
-    pub input: Vec<u8>,
 }
 
 
@@ -687,7 +679,7 @@ impl<'a> Parser<'a> {
     /// Returns an [`Error`] if parsing failed irrecoverably. Otherwise, returns
     /// [`Error::Interrupted`] if called before `Parser::parse` indicated that
     /// the [`Parser`] is done.
-    pub fn into_request(self) -> Result<RequestData, Error> {
+    pub fn into_request(self) -> Result<(Request, Vec<u8>), Error> {
         let request = match self.state {
             State::Done(r) => r,
             State::Fatal(e) => return Err(e),
@@ -695,7 +687,7 @@ impl<'a> Parser<'a> {
         };
         let mut input = Vec::from(self.input);
         input.truncate(self.input_len);
-        Ok(RequestData { request, input })
+        Ok((request, input))
     }
 }
 
@@ -712,7 +704,6 @@ mod tests {
     fn trait_check() {
         fn ok<T: Send + Unpin>() {}
         ok::<Parser>();
-        ok::<RequestData>();
     }
 
     fn add_unk(buf: &mut Vec<u8>, req_id: u16, rtype: u8) {
@@ -824,7 +815,8 @@ mod tests {
         assert_eq!(request.params, ref_params);
     }
 
-    fn run_parser(mut parser: Parser, mut input: &[u8]) -> (Result<RequestData, Error>, Vec<u8>) {
+    type IntoRequest = Result<(Request, Vec<u8>), Error>;
+    fn run_parser(mut parser: Parser, mut input: &[u8]) -> (IntoRequest, Vec<u8>) {
         let mut output = Vec::with_capacity(256);
         while !input.is_empty() {
             // Randomly read between 50 and 256 bytes from the input
@@ -854,7 +846,7 @@ mod tests {
 
         let config = Config { max_conns: 1.try_into().unwrap() };
         let (res, out) = run_parser(Parser::new(&config), &inp);
-        let RequestData { request, input: data } = res.expect("parser failed");
+        let (request, data) = res.expect("parser failed");
 
         // Trailing data may not have been read in its entirety
         assert!(data.len() <= BYTES.len());
@@ -884,7 +876,7 @@ mod tests {
 
         let config = Config { max_conns: 1.try_into().unwrap() };
         let (res, out) = run_parser(Parser::new(&config), &inp);
-        let RequestData { request, input: data } = res.expect("parser failed");
+        let (request, data) = res.expect("parser failed");
 
         assert_eq!(data, b"");
         assert_eq!(out, ABORT_A);
@@ -909,7 +901,7 @@ mod tests {
 
         let config = Config { max_conns: 1.try_into().unwrap() };
         let (res, out) = run_parser(Parser::new(&config), &inp);
-        let RequestData { request, input: data } = res.expect("parser failed");
+        let (request, data) = res.expect("parser failed");
 
         assert_eq!(data, b"");
         assert_eq!(out.len(), 2 * VALS_RESULT1.len());
@@ -937,7 +929,7 @@ mod tests {
 
         let config = Config { max_conns: 1.try_into().unwrap() };
         let (res, out) = run_parser(Parser::new(&config), &inp);
-        let RequestData { request, input: data } = res.expect("parser failed");
+        let (request, data) = res.expect("parser failed");
 
         assert_eq!(data, b"");
         assert_eq!(out.len(), 2 * UNK_A7.len());
@@ -969,7 +961,7 @@ mod tests {
 
         let config = Config { max_conns: 1.try_into().unwrap() };
         let (res, out) = run_parser(Parser::new(&config), &inp);
-        let RequestData { request, input: data } = res.expect("parser failed");
+        let (request, data) = res.expect("parser failed");
 
         assert_eq!(data, b"");
         assert_eq!(out, END_A);
@@ -997,7 +989,7 @@ mod tests {
 
         let config = Config { max_conns: 1.try_into().unwrap() };
         let (res, out) = run_parser(Parser::new(&config), &inp);
-        let RequestData { request, input: data } = res.expect("parser failed");
+        let (request, data) = res.expect("parser failed");
 
         assert_eq!(data, b"");
         assert_eq!(out, END_B);
