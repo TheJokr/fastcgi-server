@@ -565,7 +565,7 @@ pub struct Yield<'a> {
 ///
 /// The caller must feed the record stream into the parser's internal buffer,
 /// which is available via `Parser::input_buffer`. After reading `n` bytes
-/// into this buffer, `Parser::parse(n)` processes the bytes and returns an
+/// into this slice, `Parser::parse(n)` processes the bytes and returns an
 /// intermediate [`Yield`] value. The [`Yield`] may contain output bytes, which
 /// must be sent to the FastCGI client before the next `Parser::parse` call.
 /// This process is repeated until the [`Yield`] indicates that the parser is
@@ -582,20 +582,19 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    /// Creates a new [`Parser`] with the given configuration and default input
-    /// buffer size.
+    /// Creates a new [`Parser`] with the given configuration.
     ///
-    /// The default size is suitable for most FastCGI clients and balances
-    /// overheads with memory usage.
+    /// Uses a default internal buffer size which is suitable for most FastCGI
+    /// clients and balances overheads with memory usage.
     #[inline]
     pub fn new(config: &'a Config) -> Self {
         Self::with_buffer(super::DEFAULT_BUF_SIZE, config)
     }
 
-    /// Creates a new [`Parser`] with the given configuration and input buffer
-    /// size.
+    /// Creates a new [`Parser`] with the given configuration and internal
+    /// buffer size.
     ///
-    /// The input buffer needs to be at least as large as the longest
+    /// The internal buffer needs to be at least as large as the longest
     /// name-value pair to be parsed. A sufficient value is given by
     /// `MAX_HEADER_LEN + 13`, where `MAX_HEADER_LEN` is the length of the
     /// longest possible HTTP header passed by the FastCGI client (including
