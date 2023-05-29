@@ -9,9 +9,10 @@ use crate::cgi;
 use crate::protocol as fcgi;
 
 pub mod request;
+pub mod stream;
 
 
-/// Unrecoverable error types that a [`request::Parser`] may emit.
+/// Unrecoverable error types shared between the `Parser` types from submodules.
 #[derive(Debug, Clone, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
@@ -42,6 +43,8 @@ pub enum Error {
 
     /// The header of a BeginRequest FastCGI record specified a length that is
     /// different from its fixed-size body.
+    ///
+    /// This can only happen in [`request::Parser`].
     #[error(
         "BeginRequest FastCGI record has invalid length {0}, expected {}",
         fcgi::body::BeginRequest::LEN
@@ -50,8 +53,17 @@ pub enum Error {
 
     /// The header of a BeginRequest FastCGI record specified request ID 0,
     /// which the protocol reserves for management records.
+    ///
+    /// This can only happen in [`request::Parser`].
     #[error("BeginRequest FastCGI record has reserved ID 0, expected nonzero")]
     NullRequest,
+
+    /// An AbortRequest FastCGI record was received from the FastCGI client.
+    ///
+    /// This can only happen in [`stream::Parser`]. [`request::Parser`] handles
+    /// AbortRequest records internally.
+    #[error("FastCGI client ordered this request to be aborted")]
+    AbortRequest,
 
     /// A function from the [`protocol`](crate::protocol) module returned an
     /// unexpected error type.
