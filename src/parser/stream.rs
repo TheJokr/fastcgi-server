@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::io::Write;
 use std::ops::ControlFlow::{Break, Continue};
 
-use super::{Error, Request};
+use super::{request, Error, Request};
 use crate::protocol as fcgi;
 use crate::Config;
 
@@ -529,6 +529,29 @@ impl<'a> Parser<'a> {
         let mut input = Vec::from(self.buffer);
         input.truncate(self.free_start);
         Ok(input)
+    }
+
+    /// Converts this [`Parser`] into a [`request::Parser`] to parse a new
+    /// [`Request`].
+    ///
+    /// # Errors
+    /// Returns [`Error::Interrupted`] if called while the [`Parser`] is not
+    /// stopped at a record boundary. Use `Parser::is_record_boundary` to test
+    /// this condition beforehand, and continue parsing until it returns `true`.
+    ///
+    /// # Panics
+    /// `Parser::output_buffer` must be fully consumed before calling this,
+    /// otherwise an assertion panics.
+    pub fn into_request_parser(mut self) -> Result<request::Parser<'a>, Error> {
+        if !self.is_record_boundary() {
+            return Err(Error::Interrupted);
+        }
+        assert!(
+            self.output.is_empty(),
+            "output_buffer must be fully consumed before converting into request::Parser",
+        );
+        self.discard_stream();
+        Ok(request::Parser::from_parser(self.config, self.buffer, self.free_start, self.output))
     }
 }
 

@@ -4,7 +4,7 @@ use std::ops::ControlFlow::{Break, Continue};
 
 use compact_str::CompactString;
 
-use super::{Error, Request, SmallBytes};
+use super::{stream, Error, Request, SmallBytes};
 use crate::cgi;
 use crate::protocol as fcgi;
 use crate::Config;
@@ -544,7 +544,8 @@ pub struct Yield<'a> {
     /// If `true`, future calls to `Parser::parse` do not change the state of the
     /// parser any further. The parser's result, either a [`Request`] with
     /// leftover input or an [`Error`], may be retrieved via
-    /// `Parser::into_request`.
+    /// `Parser::into_request`. Alternatively, the [`Parser`] may be converted
+    /// into a [`stream::Parser`] via `Parser::into_stream_parser`.
     ///
     /// Otherwise, the parser yielded to the caller to request additional input.
     /// Input must be supplied into the slice returned by `Parser::input_buffer`
@@ -569,8 +570,8 @@ pub struct Yield<'a> {
 /// intermediate [`Yield`] value. The [`Yield`] may contain output bytes, which
 /// must be sent to the FastCGI client before the next `Parser::parse` call.
 /// This process is repeated until the [`Yield`] indicates that the parser is
-/// done. Finally, the parser is consumed with `Parser::into_request` to return
-/// the [`Request`] (or an [`Error`]).
+/// done. Finally, the parser is consumed to return the [`Request`] (or an
+/// [`Error`]).
 #[derive(Debug, Clone)]
 #[must_use = "Parser must be invoked to consume input"]
 pub struct Parser<'a> {
@@ -602,13 +603,20 @@ impl<'a> Parser<'a> {
     /// by `Parser::new` is a good starting point.
     pub fn with_buffer(buffer_size: usize, config: &'a Config) -> Self {
         let buffer_size = super::aligned_buf_size(buffer_size);
-        Self {
-            config,
-            input: vec![0; buffer_size].into_boxed_slice(),
-            input_len: 0,
-            output: Vec::with_capacity(256),
-            state: State::Header(HeaderState),
-        }
+        let buffer = vec![0; buffer_size].into_boxed_slice();
+        Self::from_parser(config, buffer, 0, Vec::with_capacity(256))
+    }
+
+    /// Creates a new [`Parser`] from another parser's existing buffers.
+    #[inline]
+    pub(super) fn from_parser(
+        config: &'a Config,
+        buffer: Box<[u8]>,
+        input_len: usize,
+        output: Vec<u8>,
+    ) -> Self {
+        debug_assert!(output.is_empty(), "output buffer not empty, contents would be lost");
+        Self { config, input: buffer, input_len, output, state: State::Header(HeaderState) }
     }
 
     /// Returns the slice of the parser's internal buffer into which new input
@@ -687,6 +695,29 @@ impl<'a> Parser<'a> {
         let mut input = Vec::from(self.input);
         input.truncate(self.input_len);
         Ok((request, input))
+    }
+
+    /// Converts this [`Parser`] into a [`stream::Parser`] for the parsed
+    /// [`Request`].
+    ///
+    /// # Errors
+    /// Returns an [`Error`] if parsing failed irrecoverably. Otherwise, returns
+    /// [`Error::Interrupted`] if called before `Parser::parse` indicated that
+    /// the [`Parser`] is done.
+    pub fn into_stream_parser(mut self) -> Result<stream::Parser<'a>, Error> {
+        let request = match self.state {
+            State::Done(r) => r,
+            State::Fatal(e) => return Err(e),
+            _ => return Err(Error::Interrupted),
+        };
+        self.output.clear();
+        Ok(stream::Parser::from_parser(
+            self.config,
+            request,
+            self.input,
+            self.input_len,
+            self.output,
+        ))
     }
 }
 
