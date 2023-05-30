@@ -153,28 +153,16 @@ impl Request {
 
 
 #[cfg(test)]
+mod test_support;
+
+#[cfg(test)]
 mod tests {
     use std::borrow::Borrow;
     use super::*;
 
-    pub(super) const BYTES: &[u8] = b"\x1f\x9a\xdaM\xeb\x82U\xb8\xfe\xf4\xb0\xc7\x80\x95\xc6\
-        \xdf\xa3\xd3O,\xae\xa3\xa8x\x18@\x9a\xf7\x0f\xd6\x18\xbdv\x90\x80I\xa1\x99\xf8\xec";
-    pub(super) const PARAMS: &[(&[u8], &[u8])] = &[
-        (b"HTTP_DATE", b"Sun, 07 May 2023 19:42:27 GMT"),
-        (b"GATEWAY_INTERFACE", b"CGI/1.1"),
-        (b"CONTENT_LENGTH", b"67828"),
-        (b"REQUEST_METHOD", b"HEAD"),
-        (b"HTTP_AuthORIZAtIon", b"Bearer FAKE-xi/atccvRF7tN7p8J4Vw+KJ3AhikzBNhIBo0zQc7be5E"),
-        (b"HTTP_x_unknown_test", b"Z+5ED\\SHGMN76&T}+fc%DE40@.jG"),
-        (b"HTTP_X_NOT_UTF8", BYTES),
-        (b"HTTP_X_FORWARDED_PROTO", b"https"),
-        (b"CONTENT_TYPE", b"text/plain"),
-        (b"HTTP_x_INVAL\xFF\xFE_head", b"az%baqw&W2bAbwA"),
-    ];
-
     #[inline]
     fn str_params() -> impl Iterator<Item = (&'static str, &'static [u8])> {
-        PARAMS.iter().filter_map(
+        test_support::PARAMS.iter().filter_map(
             |&(n, v)| Some((std::str::from_utf8(n).ok()?, v))
         )
     }
@@ -197,7 +185,7 @@ mod tests {
         assert!(!req.contains_var("kOHvQ!e&GROq&?0kz>=bQr`O`".into()));
 
         assert!(matches!(req.get_var(cgi::CONTENT_LENGTH.into()), Some(b"67828")));
-        assert!(matches!(req.get_var("http_X_not_uTF8".into()), Some(BYTES)));
+        assert!(matches!(req.get_var("http_X_not_uTF8".into()), Some(test_support::BYTES)));
         assert!(req.get_var("".into()).is_none());
         assert!(req.get_var("Y)tdz(".into()).is_none());
 

@@ -708,107 +708,15 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use std::io::prelude::*;
     use std::iter::repeat_with;
-    use super::super::tests::{BYTES, PARAMS};
+    use super::super::test_support;
     use super::*;
 
     #[test]
     fn trait_check() {
         fn ok<T: Send + Unpin>() {}
         ok::<Parser>();
-    }
-
-    fn add_unk(buf: &mut Vec<u8>, req_id: u16, rtype: u8) {
-        let rand_len = fastrand::u16(10..512);
-        let mut head = [0; 8];
-        head[0] = 1;
-        head[1] = rtype;
-        head[2..4].copy_from_slice(&req_id.to_be_bytes());
-        head[4..6].copy_from_slice(&rand_len.to_be_bytes());
-        buf.extend(head);
-        buf.extend(repeat_with(|| fastrand::u8(..)).take(rand_len.into()));
-    }
-
-    fn add_begin(buf: &mut Vec<u8>, req_id: u16) {
-        buf.extend(fcgi::body::BeginRequest {
-            role: fcgi::Role::Responder, flags: fcgi::RequestFlags::all(),
-        }.to_record(req_id));
-    }
-
-    fn add_abort(buf: &mut Vec<u8>, req_id: u16) {
-        buf.extend(fcgi::RecordHeader::new(fcgi::RecordType::AbortRequest, req_id).to_bytes());
-    }
-
-    fn add_get_vals(buf: &mut Vec<u8>, req_id: u16) {
-        const VALS: &[u8; 48] = b"\x0e\x00FCGI_MAX_CONNS\x0d\x00FCGI_MAX_REQS\
-            \x0f\x00FCGI_MPXS_CONNS";
-        buf.extend(fcgi::RecordHeader {
-            version: fcgi::Version::V1, rtype: fcgi::RecordType::GetValues,
-            request_id: req_id, content_length: 48, padding_length: 0,
-        }.to_bytes());
-        buf.extend(VALS);
-    }
-
-    const VALS_RESULT1: &[u8] = b"\x01\x0a\0\0\x00\x33\x05\0\x0e\x01FCGI_MAX_CONNS1\
-        \x0d\x01FCGI_MAX_REQS1\x0f\x01FCGI_MPXS_CONNS0\0\0\0\0\0";
-
-    fn add_params<'a, I>(buf: &mut Vec<u8>, req_id: u16, params: I, lens: &[u16])
-    where
-        I: Iterator<Item = (&'a [u8], &'a [u8])>,
-    {
-        let mut recs = lens.iter().copied();
-        let mut rem = recs.next().unwrap_or(u16::MAX);
-        let mut head = fcgi::RecordHeader {
-            version: fcgi::Version::V1, rtype: fcgi::RecordType::Params,
-            request_id: req_id, content_length: rem, padding_length: 0,
-        };
-
-        let mut head_start = buf.len();
-        buf.extend(head.to_bytes());
-
-        for nv in params {
-            let mut written = fcgi::nv::write(nv, &mut *buf).unwrap();
-            while let Some(new_written) = written.checked_sub(rem.into()) {
-                // Splice a new header after end of previous' payload
-                written = new_written;
-                rem = recs.next().unwrap_or(u16::MAX);
-                head.content_length = rem;
-
-                head_start = buf.len() - written;
-                buf.splice(head_start..head_start, head.to_bytes());
-            }
-            rem -= written as u16;
-        }
-
-        // Fix up the payload length of the last header
-        head.content_length -= rem;
-        assert_eq!(head_start + 8, buf.len() - usize::from(head.content_length));
-        buf[head_start..(head_start + 8)].copy_from_slice(&head.to_bytes());
-
-        // Add the stream end header (if necessary)
-        if head.content_length != 0 {
-            head.content_length = 0;
-            buf.extend(head.to_bytes());
-        }
-    }
-
-    fn randomize_padding(buf: &mut Vec<u8>) {
-        let mut head_start = 0;
-        while let Some(head) = buf.get_mut(head_start..(head_start + 8)) {
-            let payload = u16::from_be_bytes([head[4], head[5]]);
-            let old_pad = head[6];
-            let new_pad = fastrand::u8(..);
-            head[6] = new_pad;
-
-            head_start += 8 + usize::from(payload);
-            buf.splice(
-                head_start..(head_start + usize::from(old_pad)),
-                repeat_with(|| fastrand::u8(..)).take(new_pad.into()),
-            );
-            head_start += usize::from(new_pad);
-        }
     }
 
     #[track_caller]
@@ -821,12 +729,7 @@ mod tests {
             request.get_var_str("HTTP_X_INVAL��_HEAD".into()),
             Some("az%baqw&W2bAbwA"),
         ));
-
-        let ref_params: HashMap<_, _> = PARAMS.iter().map(|&(n, v)| {
-            let name = CompactString::from_utf8_lossy(n);
-            (cgi::OwnedVarName::from_compact(name), SmallBytes::from_slice(v))
-        }).collect();
-        assert_eq!(request.params, ref_params);
+        assert_eq!(request.params, test_support::params_map());
     }
 
     type IntoRequest = Result<(Request, Vec<u8>), Error>;
@@ -852,20 +755,24 @@ mod tests {
     fn regular() {
         const REQ_ID: u16 = 0x2751;
         let mut inp = Vec::with_capacity(8192);
-        add_get_vals(&mut inp, fcgi::FCGI_NULL_REQUEST_ID);
-        add_begin(&mut inp, REQ_ID);
-        add_params(&mut inp, REQ_ID, PARAMS.iter().copied(), &[20, 172, 39, 27, 103, 92]);
-        randomize_padding(&mut inp);
-        inp.extend(BYTES);  // opaque trailing data
+        test_support::add_get_vals(&mut inp, fcgi::FCGI_NULL_REQUEST_ID);
+        test_support::add_begin(&mut inp, REQ_ID);
+        test_support::add_params(
+            &mut inp, REQ_ID,
+            test_support::PARAMS.iter().copied(),
+            &[20, 172, 39, 27, 103, 92],
+        );
+        test_support::randomize_padding(&mut inp);
+        inp.extend(test_support::BYTES);  // opaque trailing data
 
         let config = Config::with_conns(1.try_into().unwrap());
         let (res, out) = run_parser(Parser::new(&config), &inp);
         let (request, data) = res.expect("parser failed");
 
         // Trailing data may not have been read in its entirety
-        assert!(data.len() <= BYTES.len());
-        assert_eq!(data, &BYTES[..data.len()]);
-        assert_eq!(out, VALS_RESULT1);
+        assert!(data.len() <= test_support::BYTES.len());
+        assert_eq!(data, &test_support::BYTES[..data.len()]);
+        assert_eq!(out, test_support::VALS_RESULT1);
         check_request(&request, REQ_ID);
     }
 
@@ -876,17 +783,21 @@ mod tests {
         const ABORT_A: &[u8; 16] = b"\x01\x03\x14\xf3\x00\x08\0\0\0\0\0\0\0\0\0\0";
 
         let mut inp = Vec::with_capacity(8192);
-        add_begin(&mut inp, REQ_A);
+        test_support::add_begin(&mut inp, REQ_A);
 
         // Add params, then delete all but a few records to simulate abort mid-stream
         let params_start = inp.len();
-        add_params(&mut inp, REQ_A, PARAMS.iter().copied(), &[25, 25]);
+        test_support::add_params(&mut inp, REQ_A, test_support::PARAMS.iter().copied(), &[25, 25]);
         inp.drain((params_start + 2 * fcgi::RecordHeader::LEN + 2 * 25)..);
 
-        add_abort(&mut inp, REQ_A);
-        add_begin(&mut inp, REQ_B);
-        add_params(&mut inp, REQ_B, PARAMS.iter().copied(), &[182, 316, 275]);
-        randomize_padding(&mut inp);
+        test_support::add_abort(&mut inp, REQ_A);
+        test_support::add_begin(&mut inp, REQ_B);
+        test_support::add_params(
+            &mut inp, REQ_B,
+            test_support::PARAMS.iter().copied(),
+            &[182, 316, 275],
+        );
+        test_support::randomize_padding(&mut inp);
 
         let config = Config::with_conns(1.try_into().unwrap());
         let (res, out) = run_parser(Parser::new(&config), &inp);
@@ -901,26 +812,31 @@ mod tests {
     fn mid_stream_records() {
         const REQ_ID: u16 = 1;
         let mut inp = Vec::with_capacity(8192);
-        add_get_vals(&mut inp, fcgi::FCGI_NULL_REQUEST_ID);
-        add_begin(&mut inp, REQ_ID);
+        test_support::add_get_vals(&mut inp, fcgi::FCGI_NULL_REQUEST_ID);
+        test_support::add_begin(&mut inp, REQ_ID);
         let dupes = inp.clone();
 
         // Splice GetValues and BeginRequest between Params records
         // Duplicate BeginRequest should be ignored silently
         let params_start = inp.len();
-        add_params(&mut inp, REQ_ID, PARAMS.iter().copied(), &[100, 35, 341]);
+        test_support::add_params(
+            &mut inp, REQ_ID,
+            test_support::PARAMS.iter().copied(),
+            &[100, 35, 341],
+        );
         let mid_params = params_start + fcgi::RecordHeader::LEN + 100;
         inp.splice(mid_params..mid_params, dupes);
-        randomize_padding(&mut inp);
+        test_support::randomize_padding(&mut inp);
 
         let config = Config::with_conns(1.try_into().unwrap());
         let (res, out) = run_parser(Parser::new(&config), &inp);
         let (request, data) = res.expect("parser failed");
 
+        const VALS1_LEN: usize = test_support::VALS_RESULT1.len();
         assert_eq!(data, b"");
-        assert_eq!(out.len(), 2 * VALS_RESULT1.len());
-        assert_eq!(&out[..VALS_RESULT1.len()], VALS_RESULT1);
-        assert_eq!(&out[VALS_RESULT1.len()..], VALS_RESULT1);
+        assert_eq!(out.len(), 2 * VALS1_LEN);
+        assert_eq!(&out[..VALS1_LEN], test_support::VALS_RESULT1);
+        assert_eq!(&out[VALS1_LEN..], test_support::VALS_RESULT1);
         check_request(&request, REQ_ID);
     }
 
@@ -930,16 +846,20 @@ mod tests {
         const UNK_A7: &[u8; 16] = b"\x01\x0b\x49\x43\x00\x08\0\0\xa7\0\0\0\0\0\0\0";
 
         let mut inp = Vec::with_capacity(8192);
-        add_unk(&mut inp, REQ_ID, 0xa7);
+        test_support::add_unk(&mut inp, REQ_ID, 0xa7);
         let unk = inp.clone();
 
         // Splice unknown record between Params records
-        add_begin(&mut inp, REQ_ID);
+        test_support::add_begin(&mut inp, REQ_ID);
         let params_start = inp.len();
-        add_params(&mut inp, REQ_ID, PARAMS.iter().copied(), &[71, 40, 184]);
+        test_support::add_params(
+            &mut inp, REQ_ID,
+            test_support::PARAMS.iter().copied(),
+            &[71, 40, 184],
+        );
         let mid_params = params_start + fcgi::RecordHeader::LEN + 71;
         inp.splice(mid_params..mid_params, unk);
-        randomize_padding(&mut inp);
+        test_support::randomize_padding(&mut inp);
 
         let config = Config::with_conns(1.try_into().unwrap());
         let (res, out) = run_parser(Parser::new(&config), &inp);
@@ -965,13 +885,17 @@ mod tests {
             request_id: REQ_A, content_length: 8, padding_length: 0,
         }.to_bytes());
         inp.extend(BEGIN);
-        add_params(&mut inp, REQ_A, PARAMS[..5].iter().copied(), &[672, 536]);
-        add_abort(&mut inp, REQ_A);
+        test_support::add_params(
+            &mut inp, REQ_A,
+            test_support::PARAMS[..5].iter().copied(),
+            &[672, 536],
+        );
+        test_support::add_abort(&mut inp, REQ_A);
 
         // Previous params and abort should be ignored
-        add_begin(&mut inp, REQ_B);
-        add_params(&mut inp, REQ_B, PARAMS.iter().copied(), &[]);
-        randomize_padding(&mut inp);
+        test_support::add_begin(&mut inp, REQ_B);
+        test_support::add_params(&mut inp, REQ_B, test_support::PARAMS.iter().copied(), &[]);
+        test_support::randomize_padding(&mut inp);
 
         let config = Config::with_conns(1.try_into().unwrap());
         let (res, out) = run_parser(Parser::new(&config), &inp);
@@ -989,17 +913,21 @@ mod tests {
         const END_B: &[u8; 16] = b"\x01\x03\x0a\x0b\x00\x08\0\0\0\0\0\0\x01\0\0\0";
 
         let mut inp = Vec::with_capacity(8192);
-        add_begin(&mut inp, REQ_A);
+        test_support::add_begin(&mut inp, REQ_A);
         let params_start = inp.len();
-        add_params(&mut inp, REQ_A, PARAMS.iter().copied(), &[28, 19, 57, 913]);
+        test_support::add_params(
+            &mut inp, REQ_A,
+            test_support::PARAMS.iter().copied(),
+            &[28, 19, 57, 913],
+        );
         let mid_params = params_start + 2 * 8 + 28 + 19;
 
         // Splice multiplexed request between Params records
         let mut mp = Vec::with_capacity(8192);
-        add_begin(&mut mp, REQ_B);
-        add_params(&mut mp, REQ_B, PARAMS.iter().copied(), &[284, 682]);
+        test_support::add_begin(&mut mp, REQ_B);
+        test_support::add_params(&mut mp, REQ_B, test_support::PARAMS.iter().copied(), &[284, 682]);
         inp.splice(mid_params..mid_params, mp);
-        randomize_padding(&mut inp);
+        test_support::randomize_padding(&mut inp);
 
         let config = Config::with_conns(1.try_into().unwrap());
         let (res, out) = run_parser(Parser::new(&config), &inp);
@@ -1014,11 +942,11 @@ mod tests {
     fn detect_stuck() {
         const REQ_ID: u16 = 74;
         let mut inp = Vec::with_capacity(8192);
-        add_begin(&mut inp, REQ_ID);
-        add_params(&mut inp, REQ_ID, PARAMS.iter().copied(), &[]);
+        test_support::add_begin(&mut inp, REQ_ID);
+        test_support::add_params(&mut inp, REQ_ID, test_support::PARAMS.iter().copied(), &[]);
 
         // Parser always allocates a minimum nonzero buffer size,
-        // but the name-value pairs from PARAMS exceed that.
+        // but the name-value pairs from test_support::PARAMS exceed that.
         let config = Config { buffer_size: 0, max_conns: 1.try_into().unwrap() };
         let mut parser = Parser::new(&config);
         assert!(!parser.input_buffer().is_empty());
@@ -1035,7 +963,7 @@ mod tests {
         assert!(matches!(parser.into_request(), Err(Error::Interrupted)));
 
         let mut inp = Vec::with_capacity(8192);
-        add_begin(&mut inp, 0xa9e6);
+        test_support::add_begin(&mut inp, 0xa9e6);
         inp.extend(b"\xc5");
         inp.extend(repeat_with(|| fastrand::u8(..)).take(512));
         let (res, out) = run_parser(Parser::new(&config), &inp);
@@ -1043,8 +971,12 @@ mod tests {
         assert!(matches!(res, Err(Error::UnknownVersion(0xc5))));
 
         inp.clear();
-        add_begin(&mut inp, fcgi::FCGI_NULL_REQUEST_ID);
-        add_params(&mut inp, fcgi::FCGI_NULL_REQUEST_ID, PARAMS.iter().copied(), &[267, 78, 186]);
+        test_support::add_begin(&mut inp, fcgi::FCGI_NULL_REQUEST_ID);
+        test_support::add_params(
+            &mut inp, fcgi::FCGI_NULL_REQUEST_ID,
+            test_support::PARAMS.iter().copied(),
+            &[267, 78, 186],
+        );
         let (res, out) = run_parser(Parser::new(&config), &inp);
         assert_eq!(out, b"");
         assert!(matches!(res, Err(Error::NullRequest)));
