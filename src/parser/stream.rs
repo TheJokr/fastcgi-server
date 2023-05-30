@@ -401,7 +401,7 @@ impl<'a> Parser<'a> {
             State::Skip => payload_len,
 
             State::Values { vars } => {
-                // See super::GetValuesState<T> for details
+                // See request::GetValuesState<T> for details
                 let mut nvit = fcgi::nv::NVIter::new(payload);
                 vars.extend(
                     (&mut nvit).filter_map(|(n, _)| fcgi::ProtocolVariables::parse_name(n).ok()),
