@@ -153,20 +153,9 @@ macro_rules! debug_assert_invars {
 
 impl<'a> Parser<'a> {
     /// Creates a new [`Parser`] for the given configuration and [`Request`].
-    ///
-    /// Uses a default internal buffer size which is suitable for most FastCGI
-    /// clients and balances overheads with memory usage.
     #[inline]
     pub fn new(config: &'a Config, request: Request) -> Self {
-        Self::with_buffer(super::DEFAULT_BUF_SIZE, config, request)
-    }
-
-    /// Creates a new [`Parser`] for the given configuration, [`Request`], and
-    /// internal buffer size.
-    ///
-    /// See `request::Parser::with_buffer` for some hints on buffer sizing.
-    pub fn with_buffer(buffer_size: usize, config: &'a Config, request: Request) -> Self {
-        let buffer_size = super::aligned_buf_size(buffer_size);
+        let buffer_size = config.aligned_bufsize();
         let buffer = vec![0; buffer_size].into_boxed_slice();
         Self::from_parser(config, request, buffer, 0, Vec::new())
     }

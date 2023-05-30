@@ -584,25 +584,9 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     /// Creates a new [`Parser`] with the given configuration.
-    ///
-    /// Uses a default internal buffer size which is suitable for most FastCGI
-    /// clients and balances overheads with memory usage.
     #[inline]
     pub fn new(config: &'a Config) -> Self {
-        Self::with_buffer(super::DEFAULT_BUF_SIZE, config)
-    }
-
-    /// Creates a new [`Parser`] with the given configuration and internal
-    /// buffer size.
-    ///
-    /// The internal buffer needs to be at least as large as the longest
-    /// name-value pair to be parsed. A sufficient value is given by
-    /// `MAX_HEADER_LEN + 13`, where `MAX_HEADER_LEN` is the length of the
-    /// longest possible HTTP header passed by the FastCGI client (including
-    /// both the header's name and value). In practice, the default size used
-    /// by `Parser::new` is a good starting point.
-    pub fn with_buffer(buffer_size: usize, config: &'a Config) -> Self {
-        let buffer_size = super::aligned_buf_size(buffer_size);
+        let buffer_size = config.aligned_bufsize();
         let buffer = vec![0; buffer_size].into_boxed_slice();
         Self::from_parser(config, buffer, 0, Vec::with_capacity(256))
     }
@@ -874,7 +858,7 @@ mod tests {
         randomize_padding(&mut inp);
         inp.extend(BYTES);  // opaque trailing data
 
-        let config = Config { max_conns: 1.try_into().unwrap() };
+        let config = Config::with_conns(1.try_into().unwrap());
         let (res, out) = run_parser(Parser::new(&config), &inp);
         let (request, data) = res.expect("parser failed");
 
@@ -904,7 +888,7 @@ mod tests {
         add_params(&mut inp, REQ_B, PARAMS.iter().copied(), &[182, 316, 275]);
         randomize_padding(&mut inp);
 
-        let config = Config { max_conns: 1.try_into().unwrap() };
+        let config = Config::with_conns(1.try_into().unwrap());
         let (res, out) = run_parser(Parser::new(&config), &inp);
         let (request, data) = res.expect("parser failed");
 
@@ -929,7 +913,7 @@ mod tests {
         inp.splice(mid_params..mid_params, dupes);
         randomize_padding(&mut inp);
 
-        let config = Config { max_conns: 1.try_into().unwrap() };
+        let config = Config::with_conns(1.try_into().unwrap());
         let (res, out) = run_parser(Parser::new(&config), &inp);
         let (request, data) = res.expect("parser failed");
 
@@ -957,7 +941,7 @@ mod tests {
         inp.splice(mid_params..mid_params, unk);
         randomize_padding(&mut inp);
 
-        let config = Config { max_conns: 1.try_into().unwrap() };
+        let config = Config::with_conns(1.try_into().unwrap());
         let (res, out) = run_parser(Parser::new(&config), &inp);
         let (request, data) = res.expect("parser failed");
 
@@ -989,7 +973,7 @@ mod tests {
         add_params(&mut inp, REQ_B, PARAMS.iter().copied(), &[]);
         randomize_padding(&mut inp);
 
-        let config = Config { max_conns: 1.try_into().unwrap() };
+        let config = Config::with_conns(1.try_into().unwrap());
         let (res, out) = run_parser(Parser::new(&config), &inp);
         let (request, data) = res.expect("parser failed");
 
@@ -1017,7 +1001,7 @@ mod tests {
         inp.splice(mid_params..mid_params, mp);
         randomize_padding(&mut inp);
 
-        let config = Config { max_conns: 1.try_into().unwrap() };
+        let config = Config::with_conns(1.try_into().unwrap());
         let (res, out) = run_parser(Parser::new(&config), &inp);
         let (request, data) = res.expect("parser failed");
 
@@ -1035,8 +1019,8 @@ mod tests {
 
         // Parser always allocates a minimum nonzero buffer size,
         // but the name-value pairs from PARAMS exceed that.
-        let config = Config { max_conns: 1.try_into().unwrap() };
-        let mut parser = Parser::with_buffer(0, &config);
+        let config = Config { buffer_size: 0, max_conns: 1.try_into().unwrap() };
+        let mut parser = Parser::new(&config);
         assert!(!parser.input_buffer().is_empty());
         let (res, out) = run_parser(parser, &inp);
 
@@ -1046,7 +1030,7 @@ mod tests {
 
     #[test]
     fn fatal_errs() {
-        let config = Config { max_conns: 1.try_into().unwrap() };
+        let config = Config::with_conns(1.try_into().unwrap());
         let parser = Parser::new(&config);
         assert!(matches!(parser.into_request(), Err(Error::Interrupted)));
 

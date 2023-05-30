@@ -144,7 +144,8 @@ mod tests {
     #[test]
     fn response_len() {
         let vars = ProtocolVariables::all();
-        let max_config = Config { max_conns: usize::MAX.try_into().unwrap() };
+        let max_config =
+            Config { buffer_size: usize::MAX, max_conns: usize::MAX.try_into().unwrap() };
 
         let mut buf = Vec::with_capacity(ProtocolVariables::RESPONSE_LEN.next_power_of_two());
         let written = vars.write_response(&mut buf, &max_config);
@@ -160,7 +161,7 @@ mod tests {
         const REF: &[u8] = b"\x01\x0a\0\0\x00\x37\x01\0\x0e\x03FCGI_MAX_CONNS183\
             \x0d\x03FCGI_MAX_REQS183\x0f\x01FCGI_MPXS_CONNS0\0";
         let vars = ProtocolVariables::all();
-        let config = Config { max_conns: 183.try_into().unwrap() };
+        let config = Config::with_conns(183.try_into().unwrap());
 
         let mut heap = Vec::with_capacity(ProtocolVariables::RESPONSE_LEN);
         heap.extend([0x7d; 8]);  // some existing data
