@@ -735,7 +735,7 @@ mod tests {
     type IntoRequest = Result<(Request, Vec<u8>), Error>;
     fn run_parser(mut parser: Parser, mut input: &[u8]) -> (IntoRequest, Vec<u8>) {
         let mut output = Vec::with_capacity(256);
-        while !input.is_empty() {
+        loop {
             // Randomly read between 50 and 256 bytes from the input
             // to stress the parser's continuation capabilities
             let buf = parser.input_buffer();
@@ -744,7 +744,7 @@ mod tests {
 
             let status = parser.parse(read);
             output.extend(status.output);
-            if status.done {
+            if status.done || input.is_empty() {
                 break;
             }
         }
@@ -964,7 +964,7 @@ mod tests {
 
         let mut inp = Vec::with_capacity(8192);
         test_support::add_begin(&mut inp, 0xa9e6);
-        inp.extend(b"\xc5");
+        inp.push(0xc5);
         inp.extend(repeat_with(|| fastrand::u8(..)).take(512));
         let (res, out) = run_parser(Parser::new(&config), &inp);
         assert_eq!(out, b"");

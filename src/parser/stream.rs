@@ -547,7 +547,9 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::prelude::*;
     use strum::IntoEnumIterator;
+    use super::super::test_support;
     use super::*;
 
     #[test]
@@ -574,5 +576,305 @@ mod tests {
                 assert_eq!(cmp_input_streams(role, s, Some(exp)), ref_ord);
             }
         }
+    }
+
+    fn make_parser(config: &Config, req_id: u16, role: fcgi::Role) -> Parser<'_> {
+        let body = fcgi::body::BeginRequest { role, flags: fcgi::RequestFlags::all() };
+        let mut request = Request::new(req_id.try_into().unwrap(), body);
+        request.params = test_support::params_map();
+        Parser::new(config, request)
+    }
+
+    fn parse_stream(parser: &mut Parser, input: &mut &[u8]) -> Result<(usize, usize), Error> {
+        let mut stream = 0;
+        let mut output = 0;
+        loop {
+            // Randomly read between 50 and 256 bytes from the input
+            // to stress the parser's continuation capabilities
+            let buf = parser.input_buffer();
+            let rand_len = std::cmp::min(buf.len(), fastrand::usize(50..=256));
+            let read = input.read(&mut buf[..rand_len]).unwrap();
+
+            let status = parser.parse(read, None)?;
+            stream += status.stream;
+            output += status.output;
+            parser.consume_stream(status.stream);
+            parser.compress();
+            if (status.stream_end && parser.active_stream().is_some()) || input.is_empty() {
+                break;
+            }
+        }
+        Ok((stream, output))
+    }
+
+    #[test]
+    fn conversions() {
+        const REQ_ID: u16 = 0x9b06;
+        let mut buf = Vec::with_capacity(8192);
+        test_support::add_begin(&mut buf, REQ_ID);
+        test_support::add_params(
+            &mut buf, REQ_ID,
+            test_support::PARAMS.iter().copied(),
+            &[82, 785],
+        );
+        test_support::add_get_vals(&mut buf, fcgi::FCGI_NULL_REQUEST_ID);
+        test_support::add_input(&mut buf, REQ_ID, fcgi::RecordType::Stdin, &[275, 22, 929]);
+        test_support::randomize_padding(&mut buf);
+        let mut inp = &*buf;
+
+        let config = Config::with_conns(1.try_into().unwrap());
+        let mut parser = request::Parser::new(&config);
+        loop {
+            let read = inp.read(parser.input_buffer()).unwrap();
+            let status = parser.parse(read);
+            assert_eq!(status.output, b"");
+            if status.done || inp.is_empty() {
+                break;
+            }
+        }
+
+        let mut parser = parser.into_stream_parser().expect("request parser failed");
+        assert_eq!(parser.request.request_id.get(), REQ_ID);
+        assert_eq!(parser.active_stream(), Some(fcgi::RecordType::Stdin));
+        assert!(parser.is_record_boundary());
+
+        let (stream, output) = parse_stream(&mut parser, &mut inp).expect("stream parser failed");
+        assert_eq!(stream, 275 + 22 + 929);
+        assert_eq!(output, parser.output_buffer().len());
+        assert_eq!(parser.output_buffer(), test_support::VALS_RESULT1);
+        parser.consume_output(parser.output_buffer().len());
+
+        let _parser: request::Parser = parser.into_request_parser()
+            .expect("stream parser should be done with request");
+    }
+
+    #[test]
+    fn multiple_streams() {
+        const REQ_ID: u16 = 0xf1d1;
+        let mut buf = Vec::with_capacity(8192);
+        test_support::add_input(&mut buf, REQ_ID, fcgi::RecordType::Stdin, &[286, 94, 482]);
+        test_support::add_input(&mut buf, REQ_ID, fcgi::RecordType::Data, &[173, 1374]);
+        test_support::randomize_padding(&mut buf);
+        let mut inp = &*buf;
+
+        let config = Config::with_conns(1.try_into().unwrap());
+        let mut parser = make_parser(&config, REQ_ID, fcgi::Role::Filter);
+        let (stream, output) = parse_stream(&mut parser, &mut inp).expect("parser failed");
+        assert_eq!(stream, 286 + 94 + 482);
+        assert_eq!(output, 0);
+
+        parser.set_stream(Some(fcgi::RecordType::Data)).unwrap();
+        let (stream, output) = parse_stream(&mut parser, &mut inp).expect("parser failed");
+        assert_eq!(stream, 173 + 1374);
+        assert_eq!(output, 0);
+
+        let data = parser.into_input().unwrap();
+        assert!(data.len() >= fcgi::RecordHeader::LEN);
+    }
+
+    #[test]
+    fn mid_stream_records() {
+        const REQ_ID: u16 = 0x633d;
+        let mut mid = Vec::with_capacity(2048);
+        test_support::add_begin(&mut mid, REQ_ID);
+        test_support::add_get_vals(&mut mid, fcgi::FCGI_NULL_REQUEST_ID);
+        test_support::add_input(&mut mid, REQ_ID, fcgi::RecordType::Data, &[827, 22, 327]);
+
+        // Splice additional records between Stdin records
+        // Duplicate BeginRequest should be ignored silently
+        let mut buf = Vec::with_capacity(8192);
+        test_support::add_input(&mut buf, REQ_ID, fcgi::RecordType::Stdin, &[27, 376, 785]);
+        let mid_stream = 2 * fcgi::RecordHeader::LEN + 27 + 376;
+        buf.splice(mid_stream..mid_stream, mid);
+        test_support::randomize_padding(&mut buf);
+        let mut inp = &*buf;
+
+        let config = Config::with_conns(1.try_into().unwrap());
+        let mut parser = make_parser(&config, REQ_ID, fcgi::Role::Filter);
+        let (stream, output) = parse_stream(&mut parser, &mut inp).expect("parser failed");
+        assert_eq!(stream, 27 + 376);
+        assert_eq!(output, parser.output_buffer().len());
+        assert_eq!(parser.output_buffer(), test_support::VALS_RESULT1);
+        parser.consume_output(parser.output_buffer().len());
+
+        parser.set_stream(Some(fcgi::RecordType::Data)).unwrap();
+        let (stream, output) = parse_stream(&mut parser, &mut inp).expect("parser failed");
+        assert_eq!(stream, 827 + 22 + 327);
+        assert_eq!(output, 0);
+
+        parser.set_stream(None).unwrap();
+        let (stream, output) = parse_stream(&mut parser, &mut inp).expect("parser failed");
+        assert_eq!(stream, 0);
+        assert_eq!(output, 0);
+        assert_eq!(parser.into_input().unwrap(), b"");
+    }
+
+    #[test]
+    fn unknown_record() {
+        const REQ_ID: u16 = 0x4a62;
+        const UNK_50: &[u8; 16] = b"\x01\x0b\x4a\x62\x00\x08\0\0\x50\0\0\0\0\0\0\0";
+
+        let mut mid = Vec::with_capacity(1024);
+        test_support::add_unk(&mut mid, REQ_ID, 0x50);
+        test_support::add_input(&mut mid, REQ_ID, fcgi::RecordType::Data, &[381]);
+
+        // Splice unknown records between Stdin records
+        let mut buf = Vec::with_capacity(8192);
+        test_support::add_input(&mut buf, REQ_ID, fcgi::RecordType::Stdin, &[912, 879]);
+        let mid_stream = fcgi::RecordHeader::LEN + 912;
+        buf.splice(mid_stream..mid_stream, mid);
+        test_support::randomize_padding(&mut buf);
+        let mut inp = &*buf;
+
+        let config = Config::with_conns(1.try_into().unwrap());
+        let mut parser = make_parser(&config, REQ_ID, fcgi::Role::Responder);
+        let (stream, output) = parse_stream(&mut parser, &mut inp).expect("parser failed");
+        assert_eq!(stream, 912 + 879);
+        assert_eq!(output, parser.output_buffer().len());
+        assert_eq!(parser.output_buffer(), UNK_50);
+
+        let data = parser.into_input().unwrap();
+        assert!(data.len() >= fcgi::RecordHeader::LEN);
+    }
+
+    #[test]
+    fn multiplexed() {
+        const REQ_A: u16 = 0x8c16;
+        const REQ_B: u16 = 0x386e;
+        const END_B: &[u8; 16] = b"\x01\x03\x38\x6e\x00\x08\0\0\0\0\0\0\x01\0\0\0";
+
+        let mut buf = Vec::with_capacity(8192);
+        test_support::add_begin(&mut buf, REQ_B);
+        test_support::add_params(&mut buf, REQ_B, test_support::PARAMS.iter().copied(), &[89, 278]);
+        test_support::add_input(&mut buf, REQ_A, fcgi::RecordType::Stdin, &[83, 1056]);
+        test_support::randomize_padding(&mut buf);
+        let mut inp = &*buf;
+
+        let config = Config::with_conns(1.try_into().unwrap());
+        let mut parser = make_parser(&config, REQ_A, fcgi::Role::Responder);
+        let (stream, output) = parse_stream(&mut parser, &mut inp).expect("parser failed");
+        assert_eq!(stream, 83 + 1056);
+        assert_eq!(output, parser.output_buffer().len());
+        assert_eq!(parser.output_buffer(), END_B);
+
+        let data = parser.into_input().unwrap();
+        assert!(data.len() >= fcgi::RecordHeader::LEN);
+    }
+
+    #[test]
+    fn fatal_errs() {
+        const REQ_ID: u16 = 0x2850;
+        let config = Config::with_conns(1.try_into().unwrap());
+
+        let mut buf = Vec::with_capacity(8192);
+        test_support::add_input(&mut buf, REQ_ID, fcgi::RecordType::Stdin, &[286, 93, 619]);
+        let mid_stream = 2 * fcgi::RecordHeader::LEN + 286 + 93;
+        buf.splice(mid_stream..mid_stream, [0x7d, 0x9e, 0xe4, 0xd9, 0x28, 0xab, 0x45, 0x21]);
+
+        let mut inp = &buf[..(mid_stream-38)];
+        let mut parser = make_parser(&config, REQ_ID, fcgi::Role::Responder);
+        parse_stream(&mut parser, &mut inp).expect("parser failed");
+        assert!(matches!(parser.into_input(), Err(Error::Interrupted)));
+
+        let mut inp = &*buf;
+        let mut parser = make_parser(&config, REQ_ID, fcgi::Role::Responder);
+        let res = parse_stream(&mut parser, &mut inp);
+        assert!(matches!(res, Err(Error::UnknownVersion(0x7d))));
+
+        buf.truncate(mid_stream);
+        test_support::add_abort(&mut buf, REQ_ID);
+        let mut inp = &*buf;
+        let mut parser = make_parser(&config, REQ_ID, fcgi::Role::Responder);
+        let res = parse_stream(&mut parser, &mut inp);
+        assert!(matches!(res, Err(Error::AbortRequest)));
+
+        let data = parser.into_input().unwrap();
+        assert_eq!(data, &buf[mid_stream..]);
+    }
+
+    fn set_buflen(parser: &mut Parser, stream: usize, protocol: usize) {
+        assert!(stream + protocol < parser.buffer.len());
+        parser.parsed_start = 0;
+        parser.gap_start = stream;
+        parser.raw_start = parser.gap_start;
+        parser.free_start = parser.raw_start + protocol;
+        debug_assert_invars!(parser);
+    }
+
+    #[test]
+    fn stream_mgmt() {
+        const REQ_ID: u16 = 0x7aed;
+        let config = Config::with_conns(1.try_into().unwrap());
+
+        for role in fcgi::Role::iter() {
+            let mut parser = make_parser(&config, REQ_ID, role);
+            let mut streams = role.input_streams().iter().map(|&r| Some(r)).chain([None]);
+            let mut cur = streams.next().unwrap();
+            assert_eq!(parser.active_stream(), cur);
+
+            set_buflen(&mut parser, 100, 0);
+            parser.set_stream(cur)
+                .expect("Parser should always accept current stream");
+            assert_eq!(parser.stream_buffer().len(), 100);
+
+            for s in fcgi::RecordType::iter() {
+                if s.is_input_stream() && !role.input_streams().contains(&s) {
+                    parser.set_stream(Some(s))
+                        .expect_err("Parser accepted stream {s:?} for {role:?}");
+                    assert_eq!(parser.active_stream(), cur);
+                    assert_eq!(parser.stream_buffer().len(), 100);
+                }
+            }
+
+            for next in streams {
+                set_buflen(&mut parser, 100, 0);
+                parser.set_stream(next)
+                    .expect("Parser should accept stream {next:?} for {role:?}");
+                assert_eq!(parser.active_stream(), next);
+                assert_eq!(parser.stream_buffer().len(), 0);
+
+                parser.set_stream(cur)
+                    .expect_err("Parser accepted stream {prev:?} after stream {next:?}");
+                assert_eq!(parser.active_stream(), next);
+                cur = next;
+            }
+        }
+    }
+
+    #[test]
+    fn buffer_mgmt() {
+        const REQ_ID: u16 = 0x0d44;
+        let config = Config::with_conns(1.try_into().unwrap());
+        let mut parser = make_parser(&config, REQ_ID, fcgi::Role::Responder);
+        parser.buffer.iter_mut().for_each(|b| *b = fastrand::u8(..));
+
+        parser.parsed_start = 10;
+        parser.gap_start = 210;
+        parser.raw_start = 495;
+        parser.free_start = 500;
+        parser.output.resize_with(80, || fastrand::u8(..));
+        parser.output_start = 30;
+        debug_assert_invars!(parser);
+        let free_len = parser.input_buffer().len();
+
+        let data = parser.stream_buffer().to_owned();
+        assert_eq!(data.len(), 200);
+        parser.consume_stream(75);
+        assert_eq!(parser.stream_buffer(), &data[75..]);
+
+        parser.compress();
+        assert_eq!(parser.parsed_start, 0);
+        assert_eq!(parser.raw_start, parser.gap_start);
+        assert!(parser.input_buffer().len() >= free_len + 75);
+        assert_eq!(parser.stream_buffer(), &data[75..]);
+
+        let data = parser.output_buffer().to_owned();
+        assert_eq!(data.len(), 50);
+        parser.consume_output(27);
+        assert_eq!(parser.output_buffer(), &data[27..]);
+
+        parser.consume_output(parser.output_buffer().len());
+        assert_eq!(parser.output_start, 0);
+        assert_eq!(parser.output_buffer(), b"");
     }
 }

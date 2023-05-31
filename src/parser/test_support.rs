@@ -106,6 +106,20 @@ where
     }
 }
 
+pub(super) fn add_input(buf: &mut Vec<u8>, req_id: u16, stream: fcgi::RecordType, lens: &[u16]) {
+    assert!(stream.is_input_stream());
+    let mut head = fcgi::RecordHeader::new(stream, req_id);
+    for &amt in lens {
+        head.content_length = amt;
+        buf.extend(head.to_bytes());
+        buf.extend(repeat_with(|| fastrand::u8(..)).take(amt.into()));
+    }
+
+    // Add the stream end header
+    head.content_length = 0;
+    buf.extend(head.to_bytes());
+}
+
 pub(super) fn randomize_padding(buf: &mut Vec<u8>) {
     let mut head_start = 0;
     while let Some(head) = buf.get_mut(head_start..(head_start + 8)) {
