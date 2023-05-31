@@ -27,7 +27,8 @@ pub mod parser;
 
 
 /// The central configuration for [`fastcgi_server`](crate).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Config {
     /// The allocation size for the internal buffer of a FastCGI [`parser`].
     ///

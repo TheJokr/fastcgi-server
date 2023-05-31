@@ -86,7 +86,7 @@ type SmallBytes = SmallVec<[u8; INLINE_BYTES]>;
 /// entire `Params` stream are parsed, but the other role-dependent streams
 /// still need to be extracted from the input. Handling those streams
 /// separately allows them to be implemented as `Read`/`Write` traits.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
     /// The ID of this request, to be matched against future records.
     pub request_id: NonZeroU16,
