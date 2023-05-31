@@ -429,10 +429,11 @@ impl<'a> Parser<'a> {
     fn parse_head(&mut self, res: &mut Status) -> Result<ControlFlow, Error> {
         debug_assert!(self.is_record_boundary());
         let past_head = self.raw_start + fcgi::RecordHeader::LEN;
-        let Some(head) = self.buffer.get(self.raw_start..past_head) else {
+        if past_head > self.free_start {
             return Ok(Break(()));
         };
-        let head = head.try_into().expect("slice should be same length as array");
+        let head = self.buffer[self.raw_start..past_head].try_into()
+            .expect("slice should be same length as array");
 
         let head = match fcgi::RecordHeader::from_bytes(head) {
             Ok(h) => h,
