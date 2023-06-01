@@ -23,9 +23,9 @@ pub struct Status {
     /// `Parser::set_stream`. If the active stream is already [`None`], this
     /// marks the end of the [`Request`].
     ///
-    /// Otherwise, all buffered protocol data has been parsed. New input must
-    /// be supplied into the slice returned by `Parser::input_buffer` before
-    /// the next call to `Parser::parse`.
+    /// Otherwise, either `dest` is full or all buffered protocol data has been
+    /// parsed. The latter case requires new input to be supplied before the
+    /// next call to `Parser::parse`.
     pub stream_end: bool,
 
     /// The number of bytes written into `Parser::output_buffer`.
@@ -264,7 +264,8 @@ impl<'a> Parser<'a> {
     /// `Parser::consume_stream`, leaving gaps of unused space behind. To reuse
     /// this space for `Parser::input_buffer`, data must be copied around. It
     /// is most efficient to do so when the buffer is mostly empty, that is,
-    /// after fully consuming `Parser::stream_buffer`.
+    /// after parsing all buffered protocol data and fully consuming
+    /// `Parser::stream_buffer`.
     pub fn compress(&mut self) {
         if 0 < self.parsed_start && self.parsed_start < self.gap_start {
             self.buffer.copy_within(self.parsed_start..self.gap_start, 0);
@@ -316,8 +317,9 @@ impl<'a> Parser<'a> {
     /// Parses as much of the provided record stream as possible into `dest`.
     ///
     /// `new_input` specifies the number of bytes written into the slice from
-    /// `Parser::input_buffer` since the last call to `Parser::parse`. Progress
-    /// is only possible if this number is larger than zero.
+    /// `Parser::input_buffer` since the last call to `Parser::parse`. This may
+    /// be zero if the last call left some protocol data in the buffer, such as
+    /// when `dest` is full.
     ///
     /// If `dest` is [`Some(buf)`], parsed data from the active input stream is
     /// written directly into `buf`. This requires `Parser::stream_buffer` to
