@@ -588,7 +588,11 @@ mod tests {
         Parser::new(config, request)
     }
 
-    fn parse_stream(parser: &mut Parser, input: &mut &[u8]) -> Result<(usize, usize), Error> {
+    fn parse_stream(
+        parser: &mut Parser,
+        input: &mut &[u8],
+        mut dest: Option<&mut [u8]>,
+    ) -> Result<(usize, usize), Error> {
         let mut stream = 0;
         let mut output = 0;
         loop {
@@ -598,11 +602,17 @@ mod tests {
             let rand_len = std::cmp::min(buf.len(), fastrand::usize(50..=256));
             let read = input.read(&mut buf[..rand_len]).unwrap();
 
-            let status = parser.parse(read, None)?;
+            let status = parser.parse(read, dest.as_deref_mut())?;
             stream += status.stream;
             output += status.output;
-            parser.consume_stream(status.stream);
-            parser.compress();
+            dest = if let Some(buf) = dest {
+                Some(&mut buf[status.stream..])
+            } else {
+                parser.consume_stream(status.stream);
+                parser.compress();
+                None
+            };
+
             if (status.stream_end && parser.active_stream().is_some()) || input.is_empty() {
                 break;
             }
@@ -641,14 +651,15 @@ mod tests {
         assert_eq!(parser.active_stream(), Some(fcgi::RecordType::Stdin));
         assert!(parser.is_record_boundary());
 
-        let (stream, output) = parse_stream(&mut parser, &mut inp).expect("stream parser failed");
+        let (stream, output) =
+            parse_stream(&mut parser, &mut inp, None).expect("stream parser failed");
         assert_eq!(stream, 275 + 22 + 929);
         assert_eq!(output, parser.output_buffer().len());
         assert_eq!(parser.output_buffer(), test_support::VALS_RESULT1);
         parser.consume_output(parser.output_buffer().len());
 
-        let _parser: request::Parser = parser.into_request_parser()
-            .expect("stream parser should be done with request");
+        let _parser: request::Parser =
+            parser.into_request_parser().expect("stream parser should be done with request");
     }
 
     #[test]
@@ -662,12 +673,12 @@ mod tests {
 
         let config = Config::with_conns(1.try_into().unwrap());
         let mut parser = make_parser(&config, REQ_ID, fcgi::Role::Filter);
-        let (stream, output) = parse_stream(&mut parser, &mut inp).expect("parser failed");
+        let (stream, output) = parse_stream(&mut parser, &mut inp, None).expect("parser failed");
         assert_eq!(stream, 286 + 94 + 482);
         assert_eq!(output, 0);
 
         parser.set_stream(Some(fcgi::RecordType::Data)).unwrap();
-        let (stream, output) = parse_stream(&mut parser, &mut inp).expect("parser failed");
+        let (stream, output) = parse_stream(&mut parser, &mut inp, None).expect("parser failed");
         assert_eq!(stream, 173 + 1374);
         assert_eq!(output, 0);
 
@@ -692,21 +703,24 @@ mod tests {
         test_support::randomize_padding(&mut buf);
         let mut inp = &*buf;
 
+        // Should parse until start of Data stream
         let config = Config::with_conns(1.try_into().unwrap());
         let mut parser = make_parser(&config, REQ_ID, fcgi::Role::Filter);
-        let (stream, output) = parse_stream(&mut parser, &mut inp).expect("parser failed");
+        let (stream, output) = parse_stream(&mut parser, &mut inp, None).expect("parser failed");
         assert_eq!(stream, 27 + 376);
         assert_eq!(output, parser.output_buffer().len());
         assert_eq!(parser.output_buffer(), test_support::VALS_RESULT1);
         parser.consume_output(parser.output_buffer().len());
 
+        // Should parse until Data stream end header
         parser.set_stream(Some(fcgi::RecordType::Data)).unwrap();
-        let (stream, output) = parse_stream(&mut parser, &mut inp).expect("parser failed");
+        let (stream, output) = parse_stream(&mut parser, &mut inp, None).expect("parser failed");
         assert_eq!(stream, 827 + 22 + 327);
         assert_eq!(output, 0);
 
+        // Should skip all remaining records
         parser.set_stream(None).unwrap();
-        let (stream, output) = parse_stream(&mut parser, &mut inp).expect("parser failed");
+        let (stream, output) = parse_stream(&mut parser, &mut inp, None).expect("parser failed");
         assert_eq!(stream, 0);
         assert_eq!(output, 0);
         assert_eq!(parser.into_input().unwrap(), b"");
@@ -731,7 +745,7 @@ mod tests {
 
         let config = Config::with_conns(1.try_into().unwrap());
         let mut parser = make_parser(&config, REQ_ID, fcgi::Role::Responder);
-        let (stream, output) = parse_stream(&mut parser, &mut inp).expect("parser failed");
+        let (stream, output) = parse_stream(&mut parser, &mut inp, None).expect("parser failed");
         assert_eq!(stream, 912 + 879);
         assert_eq!(output, parser.output_buffer().len());
         assert_eq!(parser.output_buffer(), UNK_50);
@@ -753,12 +767,23 @@ mod tests {
         test_support::randomize_padding(&mut buf);
         let mut inp = &*buf;
 
+        let mut dest = vec![0; 2048];
         let config = Config::with_conns(1.try_into().unwrap());
         let mut parser = make_parser(&config, REQ_A, fcgi::Role::Responder);
-        let (stream, output) = parse_stream(&mut parser, &mut inp).expect("parser failed");
-        assert_eq!(stream, 83 + 1056);
+
+        // Should only parse the first 50 bytes of Stdin
+        let (stream, output) =
+            parse_stream(&mut parser, &mut inp, Some(&mut dest[..50])).expect("parser failed");
+        assert_eq!(stream, 50);
         assert_eq!(output, parser.output_buffer().len());
         assert_eq!(parser.output_buffer(), END_B);
+        parser.consume_output(parser.output_buffer().len());
+
+        // Should parse the remainder
+        let (stream, output) =
+            parse_stream(&mut parser, &mut inp, Some(&mut *dest)).expect("parser failed");
+        assert_eq!(stream, 83 + 1056 - 50);
+        assert_eq!(output, 0);
 
         let data = parser.into_input().unwrap();
         assert!(data.len() >= fcgi::RecordHeader::LEN);
@@ -774,21 +799,21 @@ mod tests {
         let mid_stream = 2 * fcgi::RecordHeader::LEN + 286 + 93;
         buf.splice(mid_stream..mid_stream, [0x7d, 0x9e, 0xe4, 0xd9, 0x28, 0xab, 0x45, 0x21]);
 
-        let mut inp = &buf[..(mid_stream-38)];
+        let mut inp = &buf[..(mid_stream - 38)];
         let mut parser = make_parser(&config, REQ_ID, fcgi::Role::Responder);
-        parse_stream(&mut parser, &mut inp).expect("parser failed");
+        parse_stream(&mut parser, &mut inp, None).expect("parser failed");
         assert!(matches!(parser.into_input(), Err(Error::Interrupted)));
 
         let mut inp = &*buf;
         let mut parser = make_parser(&config, REQ_ID, fcgi::Role::Responder);
-        let res = parse_stream(&mut parser, &mut inp);
+        let res = parse_stream(&mut parser, &mut inp, None);
         assert!(matches!(res, Err(Error::UnknownVersion(0x7d))));
 
         buf.truncate(mid_stream);
         test_support::add_abort(&mut buf, REQ_ID);
         let mut inp = &*buf;
         let mut parser = make_parser(&config, REQ_ID, fcgi::Role::Responder);
-        let res = parse_stream(&mut parser, &mut inp);
+        let res = parse_stream(&mut parser, &mut inp, None);
         assert!(matches!(res, Err(Error::AbortRequest)));
 
         let data = parser.into_input().unwrap();
