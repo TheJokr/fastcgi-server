@@ -25,10 +25,13 @@ pub(super) const PARAMS: &[(&[u8], &[u8])] = &[
 ];
 
 pub(super) fn params_map() -> HashMap<cgi::OwnedVarName, SmallBytes> {
-    PARAMS.iter().map(|&(n, v)| {
-        let name = CompactString::from_utf8_lossy(n);
-        (cgi::OwnedVarName::from_compact(name), SmallBytes::from_slice(v))
-    }).collect()
+    PARAMS
+        .iter()
+        .map(|&(n, v)| {
+            let name = CompactString::from_utf8_lossy(n);
+            (cgi::OwnedVarName::from_compact(name), SmallBytes::from_slice(v))
+        })
+        .collect()
 }
 
 

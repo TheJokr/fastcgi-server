@@ -168,8 +168,7 @@ mod tests {
         }
 
         for rt_nv in &mut rt_it {
-            let &orig_nv = orig_it.next()
-                .expect("NVIter returned too many elements");
+            let &orig_nv = orig_it.next().expect("NVIter returned too many elements");
             assert_eq!(orig_nv.0, &*rt_nv.0);
             assert_eq!(orig_nv.1, &*rt_nv.1);
         }
