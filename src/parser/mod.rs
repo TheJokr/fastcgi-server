@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::io;
 use std::iter::FusedIterator;
 use std::num::NonZeroU16;
 
@@ -69,6 +70,19 @@ pub enum Error {
     /// unexpected error type.
     #[error("unexpected protocol error: {0}")]
     Protocol(#[from] fcgi::Error),
+}
+
+impl From<Error> for io::Error {
+    fn from(v: Error) -> Self {
+        match v {
+            Error::AbortRequest => io::ErrorKind::ConnectionAborted.into(),
+            e @ (Error::UnknownVersion(_)
+            | Error::InvalidRequestLen(_)
+            | Error::NullRequest
+            | Error::Protocol(_)) => Self::new(io::ErrorKind::InvalidData, e),
+            e => Self::new(io::ErrorKind::Other, e),
+        }
+    }
 }
 
 
