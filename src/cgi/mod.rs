@@ -32,12 +32,6 @@ impl VarName {
     #[allow(unsafe_code, clippy::let_underscore_untyped)]
     #[must_use]
     pub const fn new(s: &str) -> &Self;
-
-    /// Creates an iterator over the normalized bytes of the [`VarName`].
-    #[inline]
-    fn norm_iter(&self) -> impl Iterator<Item = u8> + '_ {
-        self.0.as_bytes().iter().map(u8::to_ascii_uppercase)
-    }
 }
 
 impl<'a, T: AsRef<str> + ?Sized> From<&'a T> for &'a VarName {
@@ -85,17 +79,33 @@ impl PartialOrd for VarName {
 
 impl Ord for VarName {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.norm_iter().cmp(other.norm_iter())
+        let lhs = self.0.as_bytes().iter().map(u8::to_ascii_uppercase);
+        let rhs = other.0.as_bytes().iter().map(u8::to_ascii_uppercase);
+        lhs.cmp(rhs)
     }
 }
 
 impl Hash for VarName {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        for byte in self.norm_iter() {
-            state.write_u8(byte);
+        // 16-byte chunks for SIMD uppercase conversion
+        const LANES: usize = 16;
+        let mut chunks = self.0.as_bytes().chunks_exact(LANES);
+
+        for c in &mut chunks {
+            let mut arr: [u8; LANES] = c.try_into().expect("chunk should be LANES-sized");
+            arr.make_ascii_uppercase();
+            state.write(&arr);
+        }
+
+        let mut arr = [0; LANES];
+        let rem = chunks.remainder();
+        if !rem.is_empty() {
+            arr[..rem.len()].copy_from_slice(rem);
+            arr.make_ascii_uppercase();
         }
         // Ensure prefix-freeness
-        state.write_u8(0xff);
+        arr[rem.len()] = 0xff;
+        state.write(&arr[..=rem.len()]);
     }
 }
 
