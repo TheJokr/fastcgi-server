@@ -208,11 +208,14 @@ mod tests {
 
     #[test]
     fn padding() {
-        let head = RecordHeader {
-            version: Version::V1, rtype: RecordType::Unknown, request_id: 1965,
-            content_length: 4982, padding_length: 177,
-        };
-        assert_eq!(head.padding_bytes(), &[0; 177]);
+        for padding_length in [0, 1, 15, 68, 177, u8::MAX] {
+            let head = RecordHeader {
+                version: Version::V1, rtype: RecordType::Unknown,
+                request_id: 1965, content_length: 4982, padding_length,
+            };
+            assert_eq!(head.padding_bytes().len(), padding_length.into());
+            assert!(head.padding_bytes().iter().all(|&b| b == 0));
+        }
 
         for len in repeat_with(|| fastrand::u16(..)).take(20) {
             for off in 0..8 {

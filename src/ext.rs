@@ -106,6 +106,6 @@ mod tests {
 
         let mut sv = <SmallVec<[u8; REF.len()]>>::from_slice(&REF[..26]);
         BytesVec::extend_from_slice(&mut sv, &REF[26..]);
-        assert_eq!(sv.as_ref(), REF);
+        assert_eq!(&*sv, REF);
     }
 }

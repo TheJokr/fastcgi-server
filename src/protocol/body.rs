@@ -154,7 +154,7 @@ mod tests {
     #[test]
     fn unknown_roundtrip() {
         let rand_rt = repeat_with(|| fastrand::u8(..)).take(5);
-        for rtype in rand_rt.chain([0, 1, 246, u8::MAX]) {
+        for rtype in rand_rt.chain([0, 1, 82, 246, u8::MAX]) {
             let orig = UnknownType { rtype };
             let rt = UnknownType::from_bytes(orig.to_bytes());
             assert_eq!(orig, rt);

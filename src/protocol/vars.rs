@@ -173,7 +173,7 @@ mod tests {
         let mut stack = <SmallVec<[u8; ProtocolVariables::RESPONSE_LEN]>>::new();
         let written = vars.write_response(&mut stack, &config);
         assert!(!stack.spilled());
-        assert_eq!(stack.as_ref(), REF);
+        assert_eq!(&*stack, REF);
         assert_eq!(written, REF.len());
     }
 }
