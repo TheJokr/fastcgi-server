@@ -584,7 +584,6 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     /// Creates a new [`Parser`] with the given configuration.
-    #[inline]
     pub fn new(config: &'a Config) -> Self {
         let buffer_size = config.aligned_bufsize();
         let buffer = vec![0; buffer_size].into_boxed_slice();

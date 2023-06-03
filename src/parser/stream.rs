@@ -153,7 +153,6 @@ macro_rules! debug_assert_invars {
 
 impl<'a> Parser<'a> {
     /// Creates a new [`Parser`] for the given configuration and [`Request`].
-    #[inline]
     pub fn new(config: &'a Config, request: Request) -> Self {
         let buffer_size = config.aligned_bufsize();
         let buffer = vec![0; buffer_size].into_boxed_slice();
