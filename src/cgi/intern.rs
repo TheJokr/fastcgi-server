@@ -35,6 +35,10 @@ pub enum StaticVarName {
     SERVER_PROTOCOL,
     SERVER_SOFTWARE,
 
+    // From the FastCGI specification
+    FCGI_DATA_LAST_MOD,
+    FCGI_DATA_LENGTH,
+
     // From Apache's variables
     REQUEST_SCHEME,
     REQUEST_URI,
