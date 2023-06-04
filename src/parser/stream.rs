@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::cmp::{min, Ordering};
 use std::io::Write;
 use std::ops::ControlFlow::{Break, Continue};
 
@@ -229,7 +229,7 @@ impl<'a> Parser<'a> {
     #[inline]
     pub fn consume_stream(&mut self, amt: usize) {
         let parsed_len = self.gap_start - self.parsed_start;
-        self.parsed_start += std::cmp::min(amt, parsed_len);
+        self.parsed_start += min(amt, parsed_len);
         debug_assert_invars!(self);
     }
 
@@ -379,7 +379,7 @@ impl<'a> Parser<'a> {
     #[must_use]
     fn parse_payload(&mut self, res: &mut Status, dest: &mut Option<&mut [u8]>) -> ControlFlow {
         let raw_len = self.free_start - self.raw_start;
-        let payload_len = std::cmp::min(usize::from(self.payload_rem), raw_len);
+        let payload_len = min(usize::from(self.payload_rem), raw_len);
         let payload = &self.buffer[self.raw_start..(self.raw_start + payload_len)];
 
         let consumed = match &mut self.state {
@@ -598,7 +598,7 @@ mod tests {
             // Randomly read between 50 and 256 bytes from the input
             // to stress the parser's continuation capabilities
             let buf = parser.input_buffer();
-            let rand_len = std::cmp::min(buf.len(), fastrand::usize(50..=256));
+            let rand_len = min(buf.len(), fastrand::usize(50..=256));
             let read = input.read(&mut buf[..rand_len]).unwrap();
 
             let status = parser.parse(read, dest.as_deref_mut())?;
