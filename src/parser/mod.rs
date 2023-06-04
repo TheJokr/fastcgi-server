@@ -1,7 +1,6 @@
-use std::collections::HashMap;
-use std::fmt::Debug;
+use std::collections::{hash_map, HashMap};
+use std::fmt;
 use std::io;
-use std::iter::FusedIterator;
 use std::num::NonZeroU16;
 
 use smallvec::SmallVec;
@@ -93,6 +92,44 @@ const INLINE_BYTES: usize = SMALLVEC_BASE_SIZE - std::mem::size_of::<usize>();
 type SmallBytes = SmallVec<[u8; INLINE_BYTES]>;
 
 
+/// An iterator over the environment variables of a [`Request`].
+#[derive(Clone)]
+#[must_use = "iterators are lazy and do nothing unless consumed"]
+pub struct EnvIter<'a> {
+    inner: hash_map::Iter<'a, cgi::OwnedVarName, SmallBytes>,
+}
+
+// Forward all non-defaulted methods from hash_map::Iter
+impl fmt::Debug for EnvIter<'_> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&self.inner, f)
+    }
+}
+
+impl<'a> Iterator for EnvIter<'a> {
+    type Item = (&'a cgi::OwnedVarName, &'a [u8]);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next().map(|(k, v)| (k, v.as_ref()))
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl std::iter::FusedIterator for EnvIter<'_> {}
+impl std::iter::ExactSizeIterator for EnvIter<'_> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.inner.len()
+    }
+}
+
+
 /// A fully-parsed FastCGI request with its CGI/1.1 environment.
 ///
 /// This is an intermediate representation of a complete FastCGI transaction.
@@ -157,11 +194,8 @@ impl Request {
 
     /// Returns an iterator over all environment variables of this [`Request`].
     #[inline]
-    #[must_use]
-    pub fn env_iter(&self) -> impl ExactSizeIterator<Item = (&cgi::OwnedVarName, &[u8])>
-            + FusedIterator + Clone + Debug + '_
-    {
-        self.params.iter().map(|(k, v)| (k, v.as_ref()))
+    pub fn env_iter(&self) -> EnvIter<'_> {
+        EnvIter { inner: self.params.iter() }
     }
 }
 
