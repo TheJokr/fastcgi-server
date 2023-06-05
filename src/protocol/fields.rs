@@ -33,12 +33,46 @@ impl From<Version> for u8 {
 
 
 /// A validated FastCGI role identifier.
-#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, strum::FromRepr)]
 #[cfg_attr(test, derive(strum::EnumIter))]
 pub enum Role {
+    /// A FastCGI responder generates a [CGI/1.1-style][resp] HTTP response for
+    /// an HTTP request.
+    ///
+    /// This role is equivalent to a regular CGI/1.1 program, but uses FastCGI
+    /// streams for communication.
+    ///
+    /// # Available Streams
+    /// | Direction | Streams                                        |
+    /// | :-------- | ---------------------------------------------- |
+    /// | Input     | [`RecordType::Stdin`]                          |
+    /// | Output    | [`RecordType::Stdout`], [`RecordType::Stderr`] |
+    ///
+    /// [resp]: https://www.rfc-editor.org/rfc/rfc3875.html#section-6
     Responder = 1,
+
+    /// A FastCGI authorizer decides whether an HTTP request should be processed
+    /// by the webserver.
+    ///
+    /// A positive decision is indicated by a `200 OK` response without a body.
+    /// Otherwise, if access shall be denied, a regular non-`200 OK` response
+    /// must be returned (like [`Role::Responder`]).
+    ///
+    /// # Available Streams
+    /// | Direction | Streams                                        |
+    /// | :-------- | ---------------------------------------------- |
+    /// | Input     | *None*                                         |
+    /// | Output    | [`RecordType::Stdout`], [`RecordType::Stderr`] |
     Authorizer = 2,
+
+    /// A FastCGI filter is a responder that receives an additional input stream
+    /// from the FastCGI client.
+    ///
+    /// # Available Streams
+    /// | Direction | Streams                                        |
+    /// | :-------- | ---------------------------------------------- |
+    /// | Input     | [`RecordType::Stdin`], [`RecordType::Data`]    |
+    /// | Output    | [`RecordType::Stdout`], [`RecordType::Stderr`] |
     Filter = 3,
 }
 
@@ -67,7 +101,8 @@ impl Role {
     /// Returns the expected input stream [`RecordType`] values for this [`Role`].
     ///
     /// Input streams must be received one after the other in the order given
-    /// in the slice, according to the FastCGI specification.
+    /// in the slice, according to the FastCGI specification. The enum variants'
+    /// documentation also lists the values for reference.
     #[must_use]
     pub fn input_streams(self) -> &'static [RecordType] {
         use RecordType::*;
@@ -122,6 +157,7 @@ impl Role {
     /// Returns the allowed output stream [`RecordType`] values for this [`Role`].
     ///
     /// The order is insignificant as output stream records may be mixed freely.
+    /// See the enum variants' documentation for a textual description.
     #[inline]
     #[must_use]
     pub fn output_streams(self) -> &'static [RecordType] {
