@@ -63,7 +63,6 @@ jobs:
         run: |-
           rustup default ${{ matrix.channel }}
           rustup component add clippy
-      - uses: Swatinem/rust-cache@v2
 
       - name: Run lints (Clippy)
         id: run-lint
