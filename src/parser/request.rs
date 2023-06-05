@@ -616,7 +616,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Moves the last `rem_len` bytes from the input buffer to the front,
-    /// discarding the rest of the input buffer.
+    /// discarding anything else.
     fn move_input(&mut self, rem_len: usize) {
         let used_len = self.input_len.checked_sub(rem_len)
             .expect("remaining input after State::drive() exceeds original input");

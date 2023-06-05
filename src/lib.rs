@@ -18,6 +18,7 @@ pub(crate) mod ext;
 pub mod protocol;
 
 // TODO(docs): Helpers for CGI/1.1 requests/responses
+// [cgi]: https://www.rfc-editor.org/rfc/rfc3875.html
 pub mod cgi;
 
 // TODO(docs): Pure FastCGI record stream parsers. Chunks of bytes are fed

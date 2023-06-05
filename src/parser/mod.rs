@@ -8,7 +8,9 @@ use smallvec::SmallVec;
 use crate::cgi;
 use crate::protocol as fcgi;
 
+/// A parser for the FastCGI request preamble, yielding a [`Request`].
 pub mod request;
+/// A parser for FastCGI input stream data after the request preamble.
 pub mod stream;
 
 
@@ -130,13 +132,15 @@ impl std::iter::ExactSizeIterator for EnvIter<'_> {
 }
 
 
-/// A fully-parsed FastCGI request with its CGI/1.1 environment.
+/// A fully-parsed FastCGI request with its [CGI/1.1 environment][env].
 ///
 /// This is an intermediate representation of a complete FastCGI transaction.
 /// The [`BeginRequest`](crate::protocol::body::BeginRequest) body and the
-/// entire `Params` stream are parsed, but the other role-dependent streams
-/// still need to be extracted from the input. Handling those streams
-/// separately allows them to be implemented as `Read`/`Write` traits.
+/// entire `Params` stream are parsed, but other role-dependent streams still
+/// need to be extracted from the input. Handling those streams separately
+/// allows them to be implemented through `Read`/`Write` traits.
+///
+/// [env]: https://www.rfc-editor.org/rfc/rfc3875.html#section-4.1
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
     /// The ID of this request, to be matched against future records.
@@ -169,8 +173,9 @@ impl Request {
         self.params.len()
     }
 
-    /// Tests whether the given variable name is part of the environment of
-    /// this [`Request`].
+    /// Tests whether the variable name is part of the environment of this
+    /// [`Request`].
+    #[inline]
     #[must_use]
     pub fn contains_var(&self, name: &cgi::VarName) -> bool {
         self.params.contains_key(name)

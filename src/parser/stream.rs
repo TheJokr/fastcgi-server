@@ -249,6 +249,9 @@ impl<'a> Parser<'a> {
     /// is later passed to `Parser::parse`. It is invalid to call any other
     /// mutating method on this [`Parser`] in between.
     ///
+    /// Use `Parser::compress` to reclaim space in this buffer after a call to
+    /// `Parser::parse`.
+    ///
     /// [read]: std::io::Read::read
     #[inline]
     #[must_use]
@@ -322,9 +325,9 @@ impl<'a> Parser<'a> {
     ///
     /// If `dest` is [`Some(buf)`], parsed data from the active input stream is
     /// written directly into `buf`. This requires `Parser::stream_buffer` to
-    /// be empty. Otherwise, stream data is appended to `Parser::stream_buffer`.
-    /// The number of bytes written, as well as an end-of-stream indication, is
-    /// reported in the returned [`Status`].
+    /// be empty. A `dest` of [`None`] appends stream data to
+    /// `Parser::stream_buffer`. The number of bytes written, as well as an
+    /// end-of-stream indication, is reported in the returned [`Status`].
     ///
     /// # Errors
     /// Returns an [`Error`] if parsing failed irrecoverably. The type's

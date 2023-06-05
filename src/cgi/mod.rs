@@ -124,8 +124,8 @@ enum VarNameInner {
 /// There are two internal representations. Well-known CGI/1.1 variable
 /// and HTTP header names are stored as a [`StaticVarName`] variant. Any
 /// name not matching one of these static values is stored as an actual
-/// string. Short strings (<=3*pointer size) are inlined into [`OwnedVarName`],
-/// longer strings are heap-allocated.
+/// string. Short strings (<= `3*pointer size`) are inlined into
+/// [`OwnedVarName`], longer strings are heap-allocated.
 #[derive(Clone)]
 #[repr(transparent)]
 pub struct OwnedVarName(VarNameInner);
