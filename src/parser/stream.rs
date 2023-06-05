@@ -21,7 +21,7 @@ pub struct Status {
     /// If `true`, future calls to `Parser::parse` will not yield additional
     /// stream data until the next stream (if any) is activated via
     /// `Parser::set_stream`. If the active stream is already [`None`], this
-    /// marks the end of the [`Request`].
+    /// marks the end of the request.
     ///
     /// Otherwise, either `dest` is full or all buffered protocol data has been
     /// parsed. The latter case requires new input to be supplied before the

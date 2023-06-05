@@ -135,10 +135,10 @@ impl std::iter::ExactSizeIterator for EnvIter<'_> {
 /// A fully-parsed FastCGI request with its [CGI/1.1 environment][env].
 ///
 /// This is an intermediate representation of a complete FastCGI transaction.
-/// The [`BeginRequest`](crate::protocol::body::BeginRequest) body and the
-/// entire `Params` stream are parsed, but other role-dependent streams still
-/// need to be extracted from the input. Handling those streams separately
-/// allows them to be implemented through `Read`/`Write` traits.
+/// The [`BeginRequest`](fcgi::body::BeginRequest) body and the entire `Params`
+/// stream are parsed, but other role-dependent streams still need to be
+/// extracted from the input. Handling those streams separately allows them to
+/// be implemented via `Read`/`Write` traits.
 ///
 /// [env]: https://www.rfc-editor.org/rfc/rfc3875.html#section-4.1
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -165,8 +165,7 @@ impl Request {
         }
     }
 
-    /// Returns the number of environment variables associated with
-    /// this [`Request`].
+    /// Returns the number of environment variables associated with this request.
     #[inline]
     #[must_use]
     pub fn env_len(&self) -> usize {
@@ -174,7 +173,7 @@ impl Request {
     }
 
     /// Tests whether the variable name is part of the environment of this
-    /// [`Request`].
+    /// request.
     #[inline]
     #[must_use]
     pub fn contains_var(&self, name: &cgi::VarName) -> bool {
@@ -197,7 +196,7 @@ impl Request {
         self.params.get(name).and_then(|b| std::str::from_utf8(b).ok())
     }
 
-    /// Returns an iterator over all environment variables of this [`Request`].
+    /// Returns an iterator over all environment variables of this request.
     #[inline]
     pub fn env_iter(&self) -> EnvIter<'_> {
         EnvIter { inner: self.params.iter() }
