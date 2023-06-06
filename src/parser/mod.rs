@@ -198,7 +198,7 @@ impl Request {
 
     /// Returns an iterator over all environment variables of this request.
     #[inline]
-    pub fn env_iter(&self) -> EnvIter<'_> {
+    pub fn env_iter(&self) -> EnvIter {
         EnvIter { inner: self.params.iter() }
     }
 }

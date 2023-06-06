@@ -156,6 +156,7 @@ impl OwnedVarName {
 
     // Internal alias because self.borrow() can't infer type
     #[inline]
+    #[must_use]
     fn as_var(&self) -> &VarName {
         self.borrow()
     }

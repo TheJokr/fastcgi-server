@@ -293,7 +293,7 @@ impl ParamsStateInner {
             return data;
         }
 
-        let name = if self.buffer.len() == head_len {
+        let name = if body_buffered == 0 {
             // Name is fully contained in the data slice. Since we moved the
             // length header into self.buffer, name must be at the start of data.
             let raw;
