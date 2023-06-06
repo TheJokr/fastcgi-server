@@ -159,8 +159,8 @@ impl Request {
         Self {
             request_id: id, role: body.role, flags: body.flags,
             // HashMap overallocates by 1/7th and rounds up to a power of 2,
-            // so this gives us 64 buckets. 32 buckets would require a capacity
-            // of at most 28, which is not enough for common web requests.
+            // so this gives us 64 buckets. 32 buckets would limit the capacity
+            // to at most 28, which is not enough for common web requests.
             params: HashMap::with_capacity(40),
         }
     }
@@ -189,8 +189,8 @@ impl Request {
     /// Attempts to retrieve the string value stored for the variable name.
     ///
     /// Returns [`None`] if there is no corresponding value *or if the value
-    /// is not valid UTF-8*. Use `Request::get_var` if you are interested in the
-    /// raw bytes and want to decode them manually.
+    /// is not valid UTF-8*. Use `Request::get_var` if you are interested in
+    /// the raw bytes and want to decode them manually.
     #[must_use]
     pub fn get_var_str(&self, name: &cgi::VarName) -> Option<&str> {
         self.params.get(name).and_then(|b| std::str::from_utf8(b).ok())

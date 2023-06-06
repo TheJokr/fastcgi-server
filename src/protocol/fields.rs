@@ -102,7 +102,7 @@ impl Role {
     ///
     /// Input streams must be received one after the other in the order given
     /// in the slice, according to the FastCGI specification. The enum variants'
-    /// documentation also lists the values for reference.
+    /// documentation also lists the order for reference.
     #[must_use]
     pub fn input_streams(self) -> &'static [RecordType] {
         use RecordType::*;

@@ -193,9 +193,10 @@ impl<'a> Parser<'a> {
     ///
     /// # Errors
     /// Returns a [`SequenceError`] if `stream` is [`Some(s)`] and either not a
-    /// valid input stream type for the request's [`Role`], or the [`Role`]
-    /// requires `stream` to precede `Parser::active_stream`. The correct order
-    /// is given by `Role::input_streams`.
+    /// valid input stream type for the request's [`Role`](fcgi::Role), or the
+    /// [`Role`](fcgi::Role) requires `stream` to precede
+    /// `Parser::active_stream`. The correct order is given by
+    /// `Role::input_streams`.
     pub fn set_stream(&mut self, stream: Option<fcgi::RecordType>) -> Result<(), SequenceError> {
         if let Some(s) = stream {
             if cmp_input_streams(self.request.role, s, self.stream) == Ordering::Less {
