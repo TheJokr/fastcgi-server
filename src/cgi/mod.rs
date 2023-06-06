@@ -30,6 +30,7 @@ impl VarName {
     #[ref_cast::ref_cast_custom]
     // Unsafe code is generated and checked by ref-cast
     #[allow(unsafe_code, clippy::let_underscore_untyped)]
+    #[inline]
     #[must_use]
     pub const fn new(s: &str) -> &Self;
 }
@@ -155,7 +156,6 @@ impl OwnedVarName {
     }
 
     // Internal alias because self.borrow() can't infer type
-    #[inline]
     #[must_use]
     fn as_var(&self) -> &VarName {
         self.borrow()

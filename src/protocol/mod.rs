@@ -128,6 +128,7 @@ impl RecordHeader {
     }
 
     /// Encodes the [`RecordHeader`] into its binary wire format.
+    #[inline]
     #[must_use]
     pub fn to_bytes(self) -> [u8; Self::LEN] {
         let mut buf = [0; Self::LEN];

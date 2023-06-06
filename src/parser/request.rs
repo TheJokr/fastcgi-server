@@ -19,7 +19,6 @@ trait WrapState: Sized {
     fn wrap_skip(skip: SkipState<Self>) -> State;
     fn wrap_values(vals: GetValuesState<Self>) -> State;
 
-    #[inline]
     fn into_skip(self, payload_rem: u16, padding_rem: u8) -> State {
         if (payload_rem | u16::from(padding_rem)) == 0 {
             self.into_state()
@@ -70,7 +69,6 @@ struct GetValuesState<T> {
 }
 
 impl<T: WrapState> GetValuesState<T> {
-    #[inline]
     fn new(next: T, payload_rem: u16, padding_rem: u8) -> Self {
         Self { next, vars: fcgi::ProtocolVariables::empty(), payload_rem, padding_rem }
     }
@@ -207,15 +205,12 @@ impl HeaderState {
 }
 
 impl WrapState for HeaderState {
-    #[inline]
     fn into_state(self) -> State {
         State::Header(self)
     }
-    #[inline]
     fn wrap_skip(skip: SkipState<Self>) -> State {
         State::HeaderSkip(skip)
     }
-    #[inline]
     fn wrap_values(vals: GetValuesState<Self>) -> State {
         State::HeaderValues(vals)
     }
@@ -246,7 +241,6 @@ macro_rules! try_fill {
 }
 
 impl ParamsStateInner {
-    #[inline]
     fn new(req: Request) -> Self {
         Self { req, buffer: Vec::new() }
     }
@@ -443,11 +437,9 @@ impl ParamsState {
         }
     }
 
-    #[inline]
     fn into_state(self) -> State {
         State::Params(self)
     }
-    #[inline]
     fn into_skip(self, payload_rem: u16, padding_rem: u8) -> State {
         // Skipping only makes sense outside of stream record bodies
         debug_assert_eq!(self.payload_rem, 0);
@@ -459,15 +451,12 @@ impl ParamsState {
 // We only need to pass ParamsStateInner through wrappers, not the entire
 // ParamsState. This reduces the overall size of the State enum.
 impl WrapState for ParamsStateInner {
-    #[inline]
     fn into_state(self) -> State {
         State::Params(ParamsState { inner: self, payload_rem: 0, padding_rem: 0 })
     }
-    #[inline]
     fn wrap_skip(skip: SkipState<Self>) -> State {
         State::ParamsSkip(skip)
     }
-    #[inline]
     fn wrap_values(vals: GetValuesState<Self>) -> State {
         State::ParamsValues(vals)
     }
@@ -476,15 +465,12 @@ impl WrapState for ParamsStateInner {
 
 // Allow completed Request to consume padding from final Params record
 impl WrapState for Request {
-    #[inline]
     fn into_state(self) -> State {
         State::Done(self)
     }
-    #[inline]
     fn wrap_skip(skip: SkipState<Self>) -> State {
         State::DoneSkip(skip)
     }
-    #[inline]
     fn wrap_values(_: GetValuesState<Self>) -> State {
         unimplemented!("completed Request may only be wrapped in SkipState");
     }
@@ -505,7 +491,6 @@ enum State {
 }
 
 impl State {
-    #[inline]
     fn drive<'a>(
         mut self,
         mut data: &'a mut [u8],

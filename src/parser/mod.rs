@@ -212,7 +212,6 @@ mod tests {
     use std::borrow::Borrow;
     use super::*;
 
-    #[inline]
     fn str_params() -> impl Iterator<Item = (&'static str, &'static [u8])> {
         test_support::PARAMS.iter().filter_map(
             |&(n, v)| Some((std::str::from_utf8(n).ok()?, v))

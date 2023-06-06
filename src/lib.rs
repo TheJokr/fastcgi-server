@@ -93,7 +93,6 @@ impl Config {
     }
 
     /// Aligns `buffer_size` upwards according to FastCGI recommendations.
-    #[inline]
     #[must_use]
     const fn aligned_bufsize(&self) -> usize {
         // Minimum buffer size required for statically-known parsing units
