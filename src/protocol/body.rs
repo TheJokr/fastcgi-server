@@ -1,5 +1,8 @@
+use smallvec::SmallVec;
+
 use super::Error as ProtocolError;
 use super::{ProtocolStatus, RecordHeader, RecordType, RequestFlags, Role, Version};
+use crate::ExitStatus;
 
 
 /// The body of a [`RecordType::Unknown`] FastCGI record.
@@ -146,9 +149,46 @@ impl EndRequest {
     }
 }
 
+impl From<ExitStatus> for EndRequest {
+    #[inline]
+    fn from(v: ExitStatus) -> Self {
+        let (protocol_status, app_status) = match v {
+            ExitStatus::Complete(c) => (ProtocolStatus::RequestComplete, c),
+            ExitStatus::Overloaded => (ProtocolStatus::Overloaded, 0),
+            ExitStatus::UnknownRole => (ProtocolStatus::UnknownRole, 0),
+        };
+        Self { app_status, protocol_status }
+    }
+}
+
+
+// Up to 2 stream end headers and 1 EndRequest header + body
+const EPILOGUE_LEN: usize = 3 * RecordHeader::LEN + EndRequest::LEN;
+
+/// Returns a record stream to shut a FastCGI request down gracefully.
+///
+/// `streams` must be a slice of output stream types. This is verified by a
+/// debug assertion.
+#[must_use]
+pub(crate) fn make_request_epilogue(
+    request_id: u16,
+    status: ExitStatus,
+    streams: &[RecordType],
+) -> SmallVec<[u8; EPILOGUE_LEN]> {
+    debug_assert!(streams.iter().all(|s| s.is_output_stream()));
+    let mut buf = SmallVec::new();
+    for &s in streams {
+        let rec = RecordHeader::new(s, request_id);
+        buf.extend_from_slice(&rec.to_bytes());
+    }
+    buf.extend_from_slice(&EndRequest::from(status).to_record(request_id));
+    buf
+}
+
 
 #[cfg(test)]
 mod tests {
+    use std::io::Read;
     use std::iter::repeat_with;
     use strum::IntoEnumIterator;
     use super::*;
@@ -263,5 +303,49 @@ mod tests {
         const BAD_STATUS: [u8; 8] = [0xbf, 0x23, 0x4d, 0x4d, 0x6a, 0x03, 0xc1, 0x0f];
         let bad_status = EndRequest::from_bytes(BAD_STATUS);
         assert!(matches!(bad_status, Err(ProtocolError::UnknownStatus(0x6a))));
+    }
+
+    #[test]
+    fn epilogue() {
+        const REQ_ID: u16 = 0xed75;
+        const REF_STATUS: [(ExitStatus, ProtocolStatus); 4] = [
+            (ExitStatus::SUCCESS, ProtocolStatus::RequestComplete),
+            (ExitStatus::Complete(0xe40a_12f9), ProtocolStatus::RequestComplete),
+            (ExitStatus::Overloaded, ProtocolStatus::Overloaded),
+            (ExitStatus::UnknownRole, ProtocolStatus::UnknownRole),
+        ];
+
+        for (exit, proto_status) in REF_STATUS {
+            let epi = make_request_epilogue(REQ_ID, exit, &[RecordType::Stdout]);
+            assert!(!epi.spilled());
+            assert_eq!(epi.len(), 24);
+            assert_eq!(&epi[..8], b"\x01\x06\xed\x75\0\0\0\0");
+
+            assert_eq!(&epi[8..16], b"\x01\x03\xed\x75\x00\x08\0\0");
+            let app_status = if let ExitStatus::Complete(code) = exit { code } else { 0 };
+            assert_eq!(&epi[16..20], app_status.to_be_bytes());
+            assert_eq!(epi[20], proto_status.into());
+        }
+    }
+
+    #[test]
+    fn epilogue_max() {
+        const REQ_ID: u16 = 0x5aec;
+        let max_streams = Role::iter().map(Role::output_streams).max_by_key(|s| s.len()).unwrap();
+        let epi = make_request_epilogue(REQ_ID, ExitStatus::SUCCESS, max_streams);
+        assert_eq!(epi.len(), EPILOGUE_LEN, "EPILOGUE_LEN should be {}", epi.len());
+        assert!(!epi.spilled());
+
+        let mut data = &*epi;
+        for &s in max_streams {
+            let mut head_read = [0; RecordHeader::LEN];
+            data.read_exact(&mut head_read)
+                .expect("epilogue should contain a header for each stream");
+            assert_eq!(head_read, RecordHeader::new(s, REQ_ID).to_bytes());
+        }
+
+        assert_eq!(data.len(), 16);
+        assert_eq!(&data[..8], b"\x01\x03\x5a\xec\x00\x08\0\0");
+        assert_eq!(&data[8..13], b"\0\0\0\0\0");
     }
 }
