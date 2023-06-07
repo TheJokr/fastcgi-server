@@ -118,6 +118,47 @@ impl Default for Config {
 }
 
 
+/// The status code returned by FastCGI request handlers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(u8)]
+pub enum ExitStatus {
+    /// The request completed in an expected fashion.
+    ///
+    /// An application-level [`u32`] status code is sent to the FastCGI client
+    /// in this case. It is equivalent to the `exit(3)` code returned by a
+    /// regular [CGI/1.1][cgi] application, for example from `int main() {...}`.
+    /// Zero indicates success, while nonzero values report different failure
+    /// modes.
+    ///
+    /// [cgi]: https://www.rfc-editor.org/rfc/rfc3875.html
+    Complete(u32) = 0,
+    /// The FastCGI application is out of resources to process the request.
+    Overloaded = 2,
+    /// The FastCGI application does not implement the requested role.
+    UnknownRole = 3,
+}
+
+impl ExitStatus {
+    /// The [`ExitStatus`] for a successful request.
+    pub const SUCCESS: Self = Self::Complete(0);
+}
+
+impl Default for ExitStatus {
+    /// Returns an [`ExitStatus`] indicating success.
+    fn default() -> Self {
+        Self::SUCCESS
+    }
+}
+
+impl From<u32> for ExitStatus {
+    /// Converts a [`u32`] into an [`ExitStatus::Complete`].
+    #[inline]
+    fn from(v: u32) -> Self {
+        Self::Complete(v)
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use std::iter::repeat_with;

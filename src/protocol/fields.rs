@@ -226,13 +226,12 @@ impl RequestFlags {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, strum::FromRepr)]
 #[cfg_attr(test, derive(strum::EnumIter))]
 pub enum ProtocolStatus {
-    /// The request completed successfully.
+    /// The request completed in an expected fashion.
     RequestComplete = 0,
     /// A second, multiplexed request was received and the FastCGI application
     /// does not support multiplexing.
     CantMpxConn = 1,
-    /// The FastCGI application is already handling its maximum number
-    /// of parallel requests.
+    /// The FastCGI application is out of resources to process the request.
     Overloaded = 2,
     /// The FastCGI application does not implement the requested role.
     UnknownRole = 3,
