@@ -94,7 +94,7 @@ enum State {
 /// A parser which extracts FastCGI stream data from a caller-provided
 /// record stream.
 ///
-/// At any time, the parser maintains an active input stream. It is set to
+/// At any time, the parser maintains an *active input stream*. It is set to
 /// the first entry of the FastCGI request's `Role::input_streams` upon
 /// creation and must advance in the order given by that slice. The current
 /// value can be retrieved via `Parser::active_stream` and set via

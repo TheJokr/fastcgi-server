@@ -140,7 +140,7 @@ impl std::iter::ExactSizeIterator for EnvIter<'_> {
 /// extracted from the input. Handling those streams separately allows them to
 /// be implemented via `Read`/`Write` traits.
 ///
-/// [env]: https://www.rfc-editor.org/rfc/rfc3875.html#section-4.1
+/// [env]: https://www.rfc-editor.org/rfc/rfc3875.html#section-4
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
     /// The ID of this request, to be matched against future records.

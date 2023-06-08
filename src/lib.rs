@@ -7,6 +7,8 @@
 #![warn(clippy::pedantic, clippy::multiple_crate_versions)]
 #![allow(clippy::enum_glob_use, clippy::cast_possible_truncation, clippy::items_after_statements)]
 
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+
 use std::num::NonZeroUsize;
 
 
@@ -25,6 +27,23 @@ pub mod cgi;
 // in by the caller, processed, and (if applicable) output bytes are returned.
 // Has parsers for both request preamble and input streams.
 pub mod parser;
+
+/// The high-level `async` interface to this library.
+///
+/// Enable the `async` cargo feature to use this interface. It is deliberately
+/// runtime-agnostic and only depends on the `futures-io` traits for its
+/// operation. This comes at the minor inconvenience of requiring a few lines
+/// of code for an `accept connection -> spawn worker` loop.
+///
+/// Each worker handles one FastCGI request at a time and invokes a
+/// caller-provided `async` request handler after parsing the request headers.
+/// The handler is provided with access to the parsed [`Request`] and should
+/// transmit a proper CGI/1.1 response according to its FastCGI
+/// [`Role`](fcgi::Role). The library takes care of ending the FastCGI-level
+/// request and reusing the connection, if possible.
+// TODO(docs): async example
+#[cfg(feature = "async")]
+pub mod async_io;
 
 
 /// The central configuration for [`fastcgi_server`](crate).
