@@ -5,7 +5,7 @@ use smallvec::SmallVec;
 
 
 /// An extension trait for byte slices that is generic over mutability.
-pub trait Bytes: Sized + Deref<Target = [u8]> {
+pub trait Bytes: Sized + Default + Deref<Target = [u8]> {
     /// Moves the start of the slice forwards by `n` bytes.
     ///
     /// # Panics
