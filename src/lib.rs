@@ -15,12 +15,24 @@ use std::num::NonZeroUsize;
 /// Helpful extension traits shared across the crate.
 pub(crate) mod ext;
 
-// TODO(docs): Based on FastCGI spec (especially Section 8)
-// See: https://fastcgi-archives.github.io/FastCGI_Specification.html
+/// Primitives to parse and encode FastCGI protocol elements.
+///
+/// The contents of this module are entirely based on the FastCGI
+/// specification, especially Section 8. An archived copy of the specification
+/// is available at
+/// <https://fastcgi-archives.github.io/FastCGI_Specification.html>.
 pub mod protocol;
 
-// TODO(docs): Helpers for CGI/1.1 requests/responses
-// [cgi]: https://www.rfc-editor.org/rfc/rfc3875.html
+/// Helpers to deal with [CGI/1.1][cgi] requests and responses.
+///
+/// FastCGI makes heavy use of CGI/1.1 syntax for its request-response model.
+/// The types and functions in this module offer abstractions over the raw
+/// bytes delivered via FastCGI. Most importantly, [`VarName`] is used to
+/// retrieve CGI meta-variables and HTTP headers from a request's environment.
+/// Use the predefined [`StaticVarName`] variants for efficiency whenever
+/// possible.
+///
+/// [cgi]: https://www.rfc-editor.org/rfc/rfc3875.html
 pub mod cgi;
 
 // TODO(docs): Pure FastCGI record stream parsers. Chunks of bytes are fed

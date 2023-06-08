@@ -14,12 +14,13 @@ pub use vars::*;
 /// The fixed FastCGI request ID for management records.
 pub const FCGI_NULL_REQUEST_ID: u16 = 0;
 
-/// The socket file descriptor passed to a FastCGI application if it was
-/// spawned directly by an HTTP server.
+/// The file descriptor of a listening socket passed to the FastCGI application
+/// if it was spawned directly by an HTTP server.
 ///
 /// # Example
+/// Only Unixes (and WASM) support FastCGI's notion of a file descriptor.
 // TODO(docs): show how to create a Listener from the RawFd
-#[cfg(any(target_family = "unix", target_family = "wasm"))]
+#[cfg(any(target_family = "unix", target_family = "wasm", doc))]
 pub const FCGI_LISTENSOCK_FILENO: std::os::fd::RawFd = 0;
 
 
