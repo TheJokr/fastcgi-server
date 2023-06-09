@@ -13,8 +13,8 @@ env:
   # Hack to enable colors in sarif-fmt
   TERM: xterm-256color
   CARGO_TERM_COLOR: always
-  # Fail CI on warnings, except for unused items
-  RUSTFLAGS: "-D warnings -W unused"
+  # Fail CI on any warnings
+  RUSTFLAGS: "-D warnings"
 
 jobs:
   test-stable:
