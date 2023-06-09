@@ -104,7 +104,7 @@ impl Config {
 
     /// Creates a new [`Config`] with all settings set to their
     /// documented defaults.
-    #[must_use = "Creating a Config is not free and has no side effects"]
+    #[must_use = "creating a Config is not free and has no side effects"]
     pub fn new() -> Self {
         let concurrency = std::thread::available_parallelism()
             .unwrap_or(1.try_into().expect("fallback should be nonzero"));
@@ -158,7 +158,7 @@ pub enum ExitStatus {
     /// An application-level [`u32`] status code is sent to the FastCGI client
     /// in this case. It is equivalent to the `exit(3)` code returned by a
     /// regular [CGI/1.1][cgi] application, for example from `int main() {...}`.
-    /// Zero indicates success, while nonzero values report different failure
+    /// Zero indicates success, while nonzero values report arbitrary failure
     /// modes.
     ///
     /// [cgi]: https://www.rfc-editor.org/rfc/rfc3875.html

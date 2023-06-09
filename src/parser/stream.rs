@@ -248,7 +248,7 @@ impl<'a> Parser<'a> {
     ///
     /// The number of bytes actually written, such as by [`Read::read`][read],
     /// is later passed to `Parser::parse`. It is invalid to call any other
-    /// mutating method on this [`Parser`] in between.
+    /// mutating function on this [`Parser`] in between.
     ///
     /// Use `Parser::compress` to reclaim space in this buffer after a call to
     /// `Parser::parse`.
