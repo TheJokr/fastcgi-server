@@ -12,8 +12,11 @@
 use std::num::NonZeroUsize;
 
 
+/// Internal macros shared across the crate.
+mod macros;
+
 /// Helpful extension traits shared across the crate.
-pub(crate) mod ext;
+mod ext;
 
 /// Primitives to parse and encode FastCGI protocol elements.
 ///

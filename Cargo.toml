@@ -12,10 +12,12 @@ categories = ["network-programming", "web-programming"]
 
 [features]
 async = ["dep:futures-util"]
+trace-more = []
 
 [dependencies]
 # Exposed to users (semver-relevant)
 bitflags = "2.0"
+tracing = "0.1"
 futures-util = { version = "0.3", optional = true, default-features = false, features = ["std", "io"] }
 
 # Internal

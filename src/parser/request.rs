@@ -112,9 +112,7 @@ impl<T: WrapState> GetValuesState<T> {
 
 
 macro_rules! to_array {
-    ($s:ident, $inp:ident, $siz:expr) => {
-        to_array!($s, $inp, 0, $siz)
-    };
+    ($s:ident, $inp:ident, $siz:expr) => (to_array!($s, $inp, 0, $siz));
     ($s:ident, $inp:ident, $off:expr, $siz:expr) => {
         match $inp.get($off..($off + $siz)) {
             Some(s) => <[u8; $siz]>::try_from(s).expect("slice should be same length as array"),
