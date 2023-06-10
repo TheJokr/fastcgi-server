@@ -111,6 +111,7 @@ impl Config {
     pub fn new() -> Self {
         let concurrency = std::thread::available_parallelism()
             .unwrap_or(1.try_into().expect("fallback should be nonzero"));
+        tracing::debug!(concurrency, "concurrency detected");
         Self::with_conns(concurrency)
     }
 
