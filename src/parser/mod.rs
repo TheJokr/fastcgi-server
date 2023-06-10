@@ -87,6 +87,22 @@ impl From<Error> for io::Error {
 }
 
 
+/// Attempts to extract a [`fcgi::ProtocolVariables`] item from a
+/// [`fcgi::RecordType::GetValues`] name-value pair.
+fn parse_nv_var((name, _): (&[u8], &[u8])) -> Option<fcgi::ProtocolVariables> {
+    // Values in name-value pairs *should* be empty, so ignore them
+    match fcgi::ProtocolVariables::parse_name(name) {
+        Ok(v) => Some(v),
+        Err(e) => {
+            // Report and ignore unknown variable names (per the specification)
+            let error: &dyn std::error::Error = &e;
+            tracing::info!(error, name = %name.escape_ascii(), "protocol variable name ignored");
+            None
+        },
+    }
+}
+
+
 const SMALLVEC_BASE_SIZE: usize = std::mem::size_of::<SmallVec<[u8; 0]>>();
 // Maximum number of inline bytes before SmallVec exceeds SMALLVEC_BASE_SIZE.
 // This derives from SmallVec's layout, which uses 1 usize as discriminant.

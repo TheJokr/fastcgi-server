@@ -81,21 +81,21 @@ impl<T: WrapState> GetValuesState<T> {
     ) -> PResult<'a> {
         if self.payload_rem > 0 {
             let len = min(data.len(), self.payload_rem.into());
-            let mut nvit = fcgi::nv::NVIter::new(&mut data[..len]);
-            self.vars.extend(
-                // Values in name-value pairs *should* be empty, so ignore them
-                // Also silently ignore unknown variable names, per the specification
-                (&mut nvit).filter_map(|(n, _)| fcgi::ProtocolVariables::parse_name(n).ok()),
-            );
-            let consumed = len - nvit.into_inner().len();
+            let mut nvit = fcgi::nv::NVIter::new(&data[..len]);
+            self.vars.extend((&mut nvit).filter_map(super::parse_nv_var));
+            let remaining = nvit.into_inner().len();
 
             if data.len() < self.payload_rem.into() {
                 // Wait for future payload bytes
+                let consumed = len - remaining;
                 self.payload_rem -= consumed as u16;
                 return Break((&mut data[consumed..], T::wrap_values(self)));
             }
-            // Payload is complete. If consumed < self.payload_rem, the GetValues
-            // body ends with an incomplete name-value pair that we ignore.
+
+            // Payload is complete. Ignore any incomplete trailing data.
+            if remaining != 0 {
+                tracing::warn!(bytes = remaining, "GetValues body ends with incomplete name-value pair");
+            }
             data = &mut data[self.payload_rem.into()..];
             self.payload_rem = 0;
             self.vars.write_response(out, config);
@@ -131,11 +131,15 @@ macro_rules! try_head {
     ($s:ident, $inp:ident, $out:ident) => {{
         let head = to_array!($s, $inp, fcgi::RecordHeader::LEN);
         match fcgi::RecordHeader::from_bytes(head) {
-            Ok(h) => h,
+            Ok(h) => {
+                $crate::macros::trace!(header = ?h, "record received");
+                h
+            },
             Err(fcgi::Error::UnknownRecordType(rtype)) => {
                 let request_id = u16::from_be_bytes([head[2], head[3]]);
                 let payload = u16::from_be_bytes([head[4], head[5]]);
                 let padding = head[6];
+                ::tracing::info!(request_id, rtype, payload, "unknown record type ignored");
 
                 // Report unknown record type to remote
                 $out.extend(fcgi::body::UnknownType { rtype }.to_record(request_id));
@@ -179,7 +183,8 @@ impl HeaderState {
 
         let body = match fcgi::body::BeginRequest::from_bytes(body_arr) {
             Ok(b) => b,
-            Err(fcgi::Error::UnknownRole(_)) => {
+            Err(fcgi::Error::UnknownRole(role)) => {
+                tracing::info!(request_id = head.request_id, role, "unknown role rejected");
                 // Report unknown role type to remote
                 out.extend(fcgi::body::EndRequest {
                     protocol_status: fcgi::ProtocolStatus::UnknownRole,
@@ -194,7 +199,7 @@ impl HeaderState {
 
         // Parse the request's Params stream in ParamsState
         let Some(req_id) = NonZeroU16::new(head.request_id) else {
-            fatal!(data, Error::NullRequest)
+            fatal!(data, Error::NullRequest);
         };
         let inner = ParamsStateInner::new(Request::new(req_id, body));
         let params = ParamsState { inner, payload_rem: 0, padding_rem: head.padding_length };
@@ -343,6 +348,11 @@ impl ParamsStateInner {
             // Reserve sufficient space for name-value pair's length header and name
             self.buffer.reserve(max(data.len(), 64));
             self.buffer.extend(&*data);
+            crate::macros::trace!(
+                request_id = self.req.request_id,
+                buffered = self.buffer.len(), allocated = self.buffer.capacity(),
+                "Params name-value pair crossed record boundary",
+            );
             len
         } else {
             len - data.len()
@@ -390,8 +400,9 @@ impl ParamsState {
             fcgi::RecordType::Params if head.request_id == req_id => {
                 if head.content_length == 0 {
                     // Params stream is finished, now return the parsed Request.
-                    // If self.inner.buffer is non-empty here, the stream ends
-                    // with an incomplete name-value pair that we ignore.
+                    if let bytes @ 1.. = self.inner.buffer.len() {
+                        tracing::warn!(bytes, "Params stream ends with incomplete name-value pair");
+                    }
                     let done = self.inner.req.into_skip(0, head.padding_length);
                     return Continue((data, done));
                 }
@@ -605,6 +616,7 @@ impl<'a> Parser<'a> {
             .expect("remaining input after State::drive() exceeds original input");
         if 0 < used_len && used_len < self.input_len {
             self.input.copy_within(used_len..self.input_len, 0);
+            crate::macros::trace!(freed = used_len, "buffer compressed");
         }
         self.input_len = rem_len;
     }
