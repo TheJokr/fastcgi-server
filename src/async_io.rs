@@ -89,6 +89,7 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for StreamWriter<W> {
 
         let this = self.get_mut();
         let lock = this.lock.get_or_insert_with(|| {
+            // Set the writer up for a new record
             assert!(!Self::is_writing(this.head), "lock was dropped mid-write");
             this.head.set_lengths(buf.len().try_into().unwrap_or(u16::MAX));
             this.head_idx = 0;
@@ -130,6 +131,7 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for StreamWriter<W> {
             debug_assert_eq!(written, 0);
         }
 
+        crate::macros::trace!(stream = ?this.stream(), bytes = buf.len(), "record written");
         this.lock = None;
         Poll::Ready(Ok(buf.len()))
     }
@@ -364,7 +366,7 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Request<'a, R, W> {
     /// # Errors
     /// Any [`io::Error`] from `R` or `W` is forwarded to the caller.
     /// Additionally, any [`parser::Error`] during protocol parsing is
-    /// converted into an [`io::Error`] with an appropraite [`io::ErrorKind`].
+    /// converted into an [`io::Error`] with an appropriate [`io::ErrorKind`].
     pub async fn writeable(&mut self) -> io::Result<()> {
         use futures_util::future::poll_fn;
         if self.writeable {
@@ -392,9 +394,9 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Request<'a, R, W> {
 
         // Can't poll_input() because it doesn't read when the active stream is None.
         // Sending Parser::output_buffer is delayed to subsequent operations.
-        let mut written = 0;
+        let mut read = 0;
         loop {
-            match self.parser.parse(written, None) {
+            match self.parser.parse(read, None) {
                 Ok(_) | Err(parser::Error::AbortRequest) => { /* Ignore */ },
                 Err(e) => return Err(e.into()),
             }
@@ -405,7 +407,7 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Request<'a, R, W> {
             // Parser::stream_buffer should never fill when the active stream is None
             debug_assert!(self.parser.stream_buffer().is_empty());
             self.parser.compress();
-            written = self.input.read(self.parser.input_buffer()).await?;
+            read = self.input.read(self.parser.input_buffer()).await?;
         }
     }
 
@@ -447,7 +449,7 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Request<'a, R, W> {
         let mut output = match Arc::try_unwrap(self.output) {
             Ok(m) => m.into_inner(),
             Err(_) => return Err(io::Error::new(io::ErrorKind::Other, format!(
-                "all StreamWriters for this Request should be dropped: {writers} left",
+                "{writers} StreamWriter(s) not dropped before Request::close",
             ))),
         };
 
@@ -459,6 +461,7 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Request<'a, R, W> {
             self.parser.consume_output(out.len());
         }
         output.write_all(&endreq).await?;
+        crate::macros::trace!("management records flushed");
 
         // Extract request::Parser if connection should be reused
         if self.parser.request.flags.contains(fcgi::RequestFlags::KeepConn) {
@@ -484,6 +487,7 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Request<'a, R, W> {
             this.parser.consume_output(written);
         }
 
+        crate::macros::trace!("management records flushed");
         this.lock = None;
         Poll::Ready(Ok(()))
     }
@@ -515,12 +519,13 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Request<'a, R, W> {
         ready!(Pin::new(&mut *this).poll_output(cx))?;
 
         // Perform an initial `Parser::parse` without new input to consume buffered protocol data
-        let mut written = 0;
+        let mut read = 0;
         loop {
-            let status = this.parser.parse(written, dest.as_deref_mut())?;
+            let status = this.parser.parse(read, dest.as_deref_mut())?;
             if status.stream_end || status.stream > 0 {
-                if !this.writeable {
-                    this.writeable = this.is_final_stream();
+                if !this.writeable && this.is_final_stream() {
+                    tracing::debug!("request became writeable");
+                    this.writeable = true;
                 }
                 return Poll::Ready(Ok(status.stream));
             }
@@ -528,7 +533,7 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Request<'a, R, W> {
             // Both stream and protocol data buffers are empty here
             this.parser.compress();
             let buf = this.parser.input_buffer();
-            written = ready!(Pin::new(&mut this.input).poll_read(cx, buf))?;
+            read = ready!(Pin::new(&mut this.input).poll_read(cx, buf))?;
         }
     }
 }
