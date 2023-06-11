@@ -89,6 +89,7 @@ impl From<Error> for io::Error {
 
 /// Attempts to extract a [`fcgi::ProtocolVariables`] item from a
 /// [`fcgi::RecordType::GetValues`] name-value pair.
+#[must_use]
 fn parse_nv_var((name, _): (&[u8], &[u8])) -> Option<fcgi::ProtocolVariables> {
     // Values in name-value pairs *should* be empty, so ignore them
     match fcgi::ProtocolVariables::parse_name(name) {

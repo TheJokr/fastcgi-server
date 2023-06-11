@@ -201,6 +201,7 @@ impl HeaderState {
         let Some(req_id) = NonZeroU16::new(head.request_id) else {
             fatal!(data, Error::NullRequest);
         };
+        tracing::debug!(request_id = req_id, ?body, "new request received");
         let inner = ParamsStateInner::new(Request::new(req_id, body));
         let params = ParamsState { inner, payload_rem: 0, padding_rem: head.padding_length };
         Continue((data, params.into_state()))
@@ -295,14 +296,14 @@ impl ParamsStateInner {
             // length header into self.buffer, name must be at the start of data.
             let raw;
             (raw, data) = data.split_at_mut(name_len);
-            CompactString::from_utf8_lossy(raw)
+            raw
         } else {
             // Name is (partially) contained in self.buffer. Move
             // the remainder, but keep value in the data slice.
             try_fill!(self.buffer, data, val_start, rec_end);
-            CompactString::from_utf8_lossy(&self.buffer[head_len..val_start])
+            &mut self.buffer[head_len..val_start]
         };
-        let name = cgi::OwnedVarName::from_compact(name);
+        let name = Self::make_cgivar(name);
 
         // Unlike name, we treat value as raw bytes and can
         // thus easily compose it from multiple sources.
@@ -324,6 +325,22 @@ impl ParamsStateInner {
         data
     }
 
+    /// Lossily converts raw bytes into a (UTF-8 based) [`cgi::OwnedVarName`].
+    ///
+    /// Valid CGI/1.1 variable names are ASCII-only, but we support invalid
+    /// ones as much as possible by replacing non-UTF-8 codepoints.
+    #[must_use]
+    fn make_cgivar(name: &[u8]) -> cgi::OwnedVarName {
+        let conv = CompactString::from_utf8_lossy(name);
+        if tracing::event_enabled!(tracing::Level::DEBUG) && name != conv.as_bytes() {
+            tracing::debug!(
+                original = %name.escape_ascii(), converted = %conv.escape_default(),
+                "lossy CGI/1.1 variable name conversion",
+            );
+        }
+        cgi::OwnedVarName::from_compact(conv)
+    }
+
     /// Parses the request's name-value Params stream, taking care to handle
     /// record boundaries.
     fn parse_stream(&mut self, mut data: &mut [u8], rec_end: bool) -> usize {
@@ -336,12 +353,9 @@ impl ParamsStateInner {
         }
 
         let mut nvit = fcgi::nv::NVIter::new(data);
-        self.req.params.extend((&mut nvit).map(|(n, v)| {
-            // Valid CGI/1.1 variable names are ASCII-only, but
-            // we want to support invalid ones as much as possible.
-            let name = CompactString::from_utf8_lossy(n);
-            (cgi::OwnedVarName::from_compact(name), SmallBytes::from_slice(v))
-        }));
+        self.req.params.extend((&mut nvit).map(
+            |(n, v)| (Self::make_cgivar(n), SmallBytes::from_slice(v)),
+        ));
         data = nvit.into_inner();
 
         if rec_end && !data.is_empty() {
@@ -399,7 +413,7 @@ impl ParamsState {
         match head.rtype {
             fcgi::RecordType::Params if head.request_id == req_id => {
                 if head.content_length == 0 {
-                    // Params stream is finished, now return the parsed Request.
+                    // Params stream is finished, now return the parsed Request
                     if let bytes @ 1.. = self.inner.buffer.len() {
                         tracing::warn!(bytes, "Params stream ends with incomplete name-value pair");
                     }
@@ -412,6 +426,7 @@ impl ParamsState {
                 Continue((data, self.into_state()))
             },
             fcgi::RecordType::AbortRequest if head.request_id == req_id => {
+                tracing::debug!(request_id = req_id, "request aborted mid-Params");
                 // Report that request was aborted to remote
                 out.extend(fcgi::body::EndRequest {
                     protocol_status: fcgi::ProtocolStatus::RequestComplete,

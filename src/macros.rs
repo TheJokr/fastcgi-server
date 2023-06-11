@@ -6,6 +6,6 @@ macro_rules! trace {
 /// Constructs an event at the trace level if `trace-more` is enabled.
 #[cfg(not(feature = "trace-more"))]
 macro_rules! trace {
-    ($($arg:tt)+) => ();
+    ($($arg:tt)+) => {};
 }
 pub(crate) use trace;
