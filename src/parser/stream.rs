@@ -280,6 +280,7 @@ impl<'a> Parser<'a> {
             self.buffer.copy_within(self.raw_start..self.free_start, self.gap_start);
         }
         // [raw_start, free_start) moved to [gap_start, free_start - (raw_start - gap_start))
+        crate::macros::trace!(freed = self.raw_start - self.gap_start, "buffer compressed");
         self.free_start -= self.raw_start - self.gap_start;
         self.raw_start = self.gap_start;
         debug_assert_invars!(self);
@@ -408,12 +409,15 @@ impl<'a> Parser<'a> {
             State::Values { vars } => {
                 // See request::GetValuesState<T> for details
                 let mut nvit = fcgi::nv::NVIter::new(payload);
-                vars.extend(
-                    (&mut nvit).filter_map(|(n, _)| fcgi::ProtocolVariables::parse_name(n).ok()),
-                );
+                vars.extend((&mut nvit).filter_map(super::parse_nv_var));
+                let remaining = nvit.into_inner().len();
+
                 if raw_len < self.payload_rem.into() {
-                    payload_len - nvit.into_inner().len()
+                    payload_len - remaining
                 } else {
+                    if remaining != 0 {
+                        tracing::warn!(bytes = remaining, "GetValues body ends with incomplete name-value pair");
+                    }
                     res.output += vars.write_response(&mut self.output, self.config);
                     payload_len
                 }
@@ -441,11 +445,15 @@ impl<'a> Parser<'a> {
             .expect("slice should be same length as array");
 
         let head = match fcgi::RecordHeader::from_bytes(head) {
-            Ok(h) => h,
+            Ok(h) => {
+                crate::macros::trace!(header = ?h, "record received");
+                h
+            },
             Err(fcgi::Error::UnknownRecordType(rtype)) => {
                 let request_id = u16::from_be_bytes([head[2], head[3]]);
                 self.payload_rem = u16::from_be_bytes([head[4], head[5]]);
                 self.padding_rem = head[6];
+                tracing::info!(request_id, rtype, payload = self.payload_rem, "unknown record type ignored");
 
                 // Report unknown record type to remote
                 let unk = fcgi::body::UnknownType { rtype }.to_record(request_id);
