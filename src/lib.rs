@@ -176,6 +176,8 @@ pub enum ExitStatus {
 impl ExitStatus {
     /// The [`ExitStatus`] for a successful request.
     pub const SUCCESS: Self = Self::Complete(0);
+    /// A non-standard [`ExitStatus`] for aborted requests.
+    pub const ABORT: Self = Self::Complete(u32::from_be_bytes(*b"ABRT"));
 }
 
 impl Default for ExitStatus {

@@ -9,7 +9,7 @@ use futures_util::lock::{Mutex, OwnedMutexGuard, OwnedMutexLockFuture};
 
 use crate::parser::{self, request, stream, EnvIter};
 use crate::protocol as fcgi;
-use crate::{cgi, ExitStatus};
+use crate::{cgi, Config, ExitStatus};
 
 
 #[derive(Debug)]
@@ -585,6 +585,177 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> AsyncBufRead for Request<'_, R
 }
 
 
+/// A token to track the number of concurrent FastCGI connections.
+///
+/// An instance of this type must be acquired from a [`Runner`] **before**
+/// accepting a new connection. This ensures that the [`Config`]'s `max_conns`
+/// is never exceeded. The token is then consumed by `Token::run`. Once that
+/// function returns, the [`Runner`] will allow a new connection.
+#[derive(Debug)]
+#[must_use = "tokens only exist to call Token::run"]
+pub struct Token {
+    config: Arc<Config>,
+    _g: async_lock::SemaphoreGuardArc,
+}
+
+impl Token {
+    /// Invokes the `handler` once for each FastCGI request from the connection.
+    ///
+    /// `async` runtimes generally allow the read and write half of a network
+    /// connection to be split into separate types, for example via shared
+    /// references, cloning, or a function on the connection instance.
+    /// `fastcgi_server` is built around working on these halves separately.
+    /// The connection should not be used by the caller anymore after passing it
+    /// to this function.
+    ///
+    /// The handler's type `H` is equivalent to a function with signature
+    /// `async fn(&mut Request<R, W>) -> io::Result<ExitStatus>`. An [`Err`]
+    /// result causes the connection to be torn down. This is meant to simplify
+    /// reading from and writing to the request's streams. Use [`Ok(ExitStatus)`]
+    /// with different status codes to signal regular (non-IO-related) exits,
+    /// which permits connection reuse.
+    ///
+    /// A graceful response to the request requires all [`StreamWriters`] to be
+    /// dropped when the `handler` returns. Otherwise, the request will be left
+    /// in an incomplete state and the connection is terminated once the last
+    /// [`StreamWriter`] is dropped.
+    ///
+    /// # Panics
+    /// Any panics from the `handler` are propagated through this function,
+    /// dropping the connection in the process. `async` runtimes differ in their
+    /// handling of panics from spawned tasks, so you might want to consider
+    /// catching them at the `Token::run` boundary. [`Request`] and
+    /// [`StreamWriter`] can be treated as unwind-safe provided that none of
+    /// their instances survive past the `handler` invocation.
+    pub async fn run<R, W, H, F>(self, mut input: R, mut output: W, mut handler: H)
+    where
+        R: AsyncRead + Unpin,
+        W: AsyncWrite + Unpin,
+        H: FnMut(&mut Request<R, W>) -> F,
+        F: Future<Output = io::Result<ExitStatus>>,
+    {
+        // False positive
+        #![allow(clippy::manual_let_else)]
+        use tracing::Instrument;
+
+        let mut rparser = request::Parser::new(&self.config);
+        loop {
+            let sparser = match Self::parse_request(rparser, &mut input, &mut output).await {
+                Ok(p) => p,
+                Err(e) if e.kind() == io::ErrorKind::ConnectionReset => {
+                    tracing::debug!("connection closed by remote");
+                    return;
+                },
+                Err(e) => {
+                    let error: &dyn std::error::Error = &e;
+                    tracing::error!(error, "parsing request failed");
+                    return;
+                },
+            };
+
+            let span = tracing::warn_span!(
+                "fastcgi_request", request_id = sparser.request.request_id,
+                role = ?sparser.request.role, flags = %sparser.request.flags.bits(),
+            );
+
+            let out = async {
+                let mut req = Request::new(sparser, input, output);
+                let status = match handler(&mut req).await {
+                    Ok(s) => s,
+                    Err(e) if e.kind() == io::ErrorKind::ConnectionAborted => {
+                        tracing::debug!("request aborted by remote");
+                        ExitStatus::ABORT
+                    },
+                    Err(e) => {
+                        let error: &dyn std::error::Error = &e;
+                        tracing::error!(error, "IO failed mid-request");
+                        return None;
+                    },
+                };
+
+                let next = match req.close(status).await {
+                    Ok(p) => Some(p),
+                    Err(e) if e.kind() == io::ErrorKind::ConnectionReset => None,
+                    Err(e) => {
+                        let error: &dyn std::error::Error = &e;
+                        tracing::error!(error, "closing request failed");
+                        return None;
+                    },
+                };
+                let connection = if next.is_some() { "reuse" } else { "close" };
+                tracing::debug!(connection, "request completed");
+                next
+            }.instrument(span).await;
+
+            (rparser, input, output) = match out {
+                Some(p) => p,
+                None => return,
+            };
+        }
+    }
+
+    async fn parse_request<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
+        mut parser: request::Parser<'a>,
+        input: &mut R,
+        output: &mut W,
+    ) -> io::Result<stream::Parser<'a>> {
+        use futures_util::{AsyncReadExt, AsyncWriteExt};
+        loop {
+            let read = input.read(parser.input_buffer()).await?;
+            if read == 0 {
+                // Client-initiated connection shutdown
+                return Err(io::ErrorKind::ConnectionReset.into());
+            }
+
+            let status = parser.parse(read);
+            if !status.output.is_empty() {
+                output.write_all(status.output).await?;
+            }
+            if status.done {
+                return parser.into_stream_parser().map_err(Into::into);
+            }
+        }
+    }
+}
+
+
+/// A [`Token`] printer that limits the number of concurrent FastCGI
+/// connections.
+///
+/// Use `Config::async_runner` to construct a [`Runner`] for up to `max_conns`
+/// concurrent connections. The runner should then be moved into the `async`
+/// task responsible for accepting incoming FastCGI connections. A [`Token`]
+/// must be acquired via `Runner::get_token` **before** accepting a new
+/// connection. It serves as the entrypoint to the rest of the library.
+///
+/// [`Runner`] instances can be shared across multiple `async` tasks, either by
+/// cloning or via references. Cloned instances share the same connection limit.
+#[derive(Debug, Clone)]
+pub struct Runner {
+    config: Arc<Config>,
+    sema: Arc<async_lock::Semaphore>,
+}
+
+impl Runner {
+    /// Waits for a [`Token`] to become available and returns it.
+    #[inline]
+    pub async fn get_token(&self) -> Token {
+        let g = self.sema.acquire_arc().await;
+        Token { config: self.config.clone(), _g: g }
+    }
+}
+
+impl Config {
+    /// Creates an [`async_io::Runner`](Runner) with a limit of `max_conns`
+    /// concurrent connections.
+    #[must_use]
+    pub fn async_runner(self) -> Runner {
+        let sema = async_lock::Semaphore::new(self.max_conns.get());
+        Runner { config: self.into(), sema: sema.into() }
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -595,5 +766,9 @@ mod tests {
         // () is trivially Unpin
         ok::<Request<(), ()>>();
         ok::<StreamWriter<()>>();
+
+        fn spawnable<T: Send + 'static>() {}
+        spawnable::<Runner>();
+        spawnable::<Token>();
     }
 }
