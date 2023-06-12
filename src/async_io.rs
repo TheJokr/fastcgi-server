@@ -131,8 +131,8 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for StreamWriter<W> {
             debug_assert_eq!(written, 0);
         }
 
-        crate::macros::trace!(stream = ?this.stream(), bytes = buf.len(), "record written");
         this.lock = None;
+        crate::macros::trace!(stream = ?this.stream(), bytes = buf.len(), "record written");
         Poll::Ready(Ok(buf.len()))
     }
 
@@ -203,10 +203,13 @@ impl<'a, R, W> Request<'a, R, W> {
     /// `async` [`Request`].
     #[must_use]
     pub fn new(inner: stream::Parser<'a>, input: R, output: W) -> Self {
-        // Roles with 0 or 1 input stream(s) are writeable after reading the Params stream
-        let writeable = inner.request.role.input_streams().len() <= 1;
         let output = Arc::new(Mutex::new(output));
-        Self { parser: inner, input, output, lock: None, writeable }
+        let mut req = Self { parser: inner, input, output, lock: None, writeable: false };
+        if req.role().input_streams().len() <= 1 {
+            // Roles with 0 or 1 input stream(s) are writeable after reading the Params stream
+            req.set_writeable();
+        }
+        req
     }
 
     /// Returns the role of the FastCGI application in this request.
@@ -306,6 +309,7 @@ impl<'a, R, W> Request<'a, R, W> {
     pub fn set_stream(&mut self, stream: fcgi::RecordType) {
         self.parser.set_stream(Some(stream))
             .expect("streams should follow the order given by Role::input_streams");
+        tracing::debug!(?stream, "active input stream changed");
     }
 
     /// Tests whether the request has become writeable.
@@ -348,6 +352,11 @@ impl<'a, R, W> Request<'a, R, W> {
     #[must_use]
     fn is_final_stream(&self) -> bool {
         self.role().next_input_stream(self.active_stream()).is_none()
+    }
+
+    fn set_writeable(&mut self) {
+        self.writeable = true;
+        tracing::debug!("request became writeable");
     }
 }
 
@@ -487,8 +496,8 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Request<'a, R, W> {
             this.parser.consume_output(written);
         }
 
-        crate::macros::trace!("management records flushed");
         this.lock = None;
+        crate::macros::trace!("management records flushed");
         Poll::Ready(Ok(()))
     }
 
@@ -524,8 +533,7 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Request<'a, R, W> {
             let status = this.parser.parse(read, dest.as_deref_mut())?;
             if status.stream_end || status.stream > 0 {
                 if !this.writeable && this.is_final_stream() {
-                    tracing::debug!("request became writeable");
-                    this.writeable = true;
+                    this.set_writeable();
                 }
                 return Poll::Ready(Ok(status.stream));
             }
