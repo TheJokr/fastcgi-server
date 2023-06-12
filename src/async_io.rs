@@ -49,7 +49,8 @@ impl<T: ?Sized> RepeatableLockFuture<T> {
 /// All writers for a given [`Request`] share an underlying connection. Their
 /// writes are therefore synchronized through a `Mutex` and happen in series.
 /// A stream record is always written out completely before unlocking the
-/// `Mutex` again.
+/// `Mutex` again. If an error occurs, the lock is kept until a subsequent call
+/// wrote a sufficient number of bytes.
 #[derive(Debug)]
 pub struct StreamWriter<W> {
     writer: Arc<Mutex<W>>,
@@ -112,6 +113,9 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for StreamWriter<W> {
             ];
             // Keep lock even in the Err case: header might have already been written
             let mut written = ready!(Pin::new(&mut *w).poll_write_vectored(cx, &iov))?;
+            if written == 0 {
+                return Poll::Ready(Err(io::ErrorKind::WriteZero.into()))
+            }
 
             // Calculates how many bytes of each IoSlice were written.
             // This ensures the calculations and casts below do not overflow.
@@ -180,8 +184,8 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for StreamWriter<W> {
 /// order, we expose them via the [`AsyncRead`] and [`AsyncBufRead`] impls on
 /// [`Request`]. The methods from those traits only ever read data from the
 /// *active input stream*, which is initially set to the first input stream
-/// allowed by the request's [`Role`](fcgi::Role). Reads only ever return 0 bytes
-/// if the active stream reached its end.
+/// allowed by the request's [`Role`](fcgi::Role). Reads return 0 bytes when
+/// the active stream reached its end.
 ///
 /// A subsequent stream may, at any time, be activated via `Request::set_stream`.
 /// See the documentation of that function for details. This allows input
@@ -417,6 +421,9 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Request<'a, R, W> {
             debug_assert!(self.parser.stream_buffer().is_empty());
             self.parser.compress();
             read = self.input.read(self.parser.input_buffer()).await?;
+            if read == 0 {
+                return Err(io::ErrorKind::UnexpectedEof.into());
+            }
         }
     }
 
@@ -493,6 +500,9 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Request<'a, R, W> {
         while let out @ [_, ..] = this.parser.output_buffer() {
             // Keep lock even in the Err case: header might have already been written
             let written = ready!(Pin::new(&mut *w).poll_write(cx, out))?;
+            if written == 0 {
+                return Poll::Ready(Err(io::ErrorKind::WriteZero.into()));
+            }
             this.parser.consume_output(written);
         }
 
@@ -542,6 +552,10 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Request<'a, R, W> {
             this.parser.compress();
             let buf = this.parser.input_buffer();
             read = ready!(Pin::new(&mut this.input).poll_read(cx, buf))?;
+            if read == 0 {
+                // Connection was closed without end-of-stream record
+                return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into()));
+            }
         }
     }
 }
