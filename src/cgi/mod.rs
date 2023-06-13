@@ -7,6 +7,19 @@ use compact_str::CompactString;
 
 mod intern;
 
+/// Functions to compose CGI/1.1 responses for HTTP.
+///
+/// This module uses [`http`] types and thus requires the `http` feature.
+///
+/// Each function takes a [`std::io::Write`] parameter as a destination for its
+/// output. This writer should be buffered as each individual write is usually
+/// very small in size. Blocking writers can be wrapped in a
+/// [`std::io::BufWriter`] for this purpose, whereas `async` writers will need
+/// a temporary buffer like a [`Vec<u8>`] or an `&mut [u8]`, both of which
+/// implement [`std::io::Write`].
+#[cfg(feature = "http")]
+pub mod response;
+
 pub use intern::StaticVarName;
 pub use StaticVarName::*;
 
