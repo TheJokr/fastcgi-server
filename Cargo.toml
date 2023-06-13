@@ -16,6 +16,9 @@ log = ["tracing/log"]
 trace-more = []
 
 [dependencies]
+# Integrations (semver-relevant)
+http = { version = "0.2", optional = true }
+
 # Exposed to users (semver-relevant)
 bitflags = "2.0"
 tracing = "0.1"

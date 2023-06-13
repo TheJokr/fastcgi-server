@@ -215,6 +215,17 @@ impl<'a> From<Cow<'a, str>> for OwnedVarName {
     }
 }
 
+#[cfg(feature = "http")]
+impl From<http::header::HeaderName> for OwnedVarName {
+    /// Converts an [`http::HeaderName`] into an [`OwnedVarName`] by mapping
+    /// the header to its CGI/1.1 representation.
+    fn from(v: http::header::HeaderName) -> Self {
+        let mut var = CompactString::new_inline("HTTP_");
+        var.push_str(v.as_str());
+        Self::from_compact(var)
+    }
+}
+
 
 impl AsRef<str> for OwnedVarName {
     #[inline]
