@@ -114,7 +114,7 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for StreamWriter<W> {
             // Keep lock even in the Err case: header might have already been written
             let mut written = ready!(Pin::new(&mut *w).poll_write_vectored(cx, &iov))?;
             if written == 0 {
-                return Poll::Ready(Err(io::ErrorKind::WriteZero.into()))
+                return Poll::Ready(Err(io::ErrorKind::WriteZero.into()));
             }
 
             // Calculates how many bytes of each IoSlice were written.
