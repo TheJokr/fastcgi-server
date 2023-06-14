@@ -381,7 +381,7 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Request<'a, R, W> {
     /// Additionally, any [`parser::Error`] during protocol parsing is
     /// converted into an [`io::Error`] with an appropriate [`io::ErrorKind`].
     pub async fn writeable(&mut self) -> io::Result<()> {
-        use futures_util::future::poll_fn;
+        use std::future::poll_fn;
         if self.writeable {
             return Ok(());
         }
@@ -758,6 +758,9 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
+    use std::iter::repeat_with;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::task::Wake;
     use super::*;
 
     #[test]
@@ -770,5 +773,145 @@ mod tests {
         fn spawnable<T: Send + 'static>() {}
         spawnable::<Runner>();
         spawnable::<Token>();
+    }
+
+    // Most of the code in this module just wires up the individually-tested
+    // parsers to a network connection. We test that glue code outside of Rust's
+    // test framework with a real webserver in the loop.
+
+    struct CountWaker {
+        wakes: AtomicUsize,
+    }
+    impl CountWaker {
+        fn new() -> Arc<Self> {
+            Arc::new(Self { wakes: 0.into() })
+        }
+        fn wakes(&self) -> usize {
+            self.wakes.load(Ordering::Relaxed)
+        }
+    }
+    impl Wake for CountWaker {
+        fn wake(self: Arc<Self>) {
+            self.wakes.fetch_add(1, Ordering::Relaxed);
+        }
+        fn wake_by_ref(self: &Arc<Self>) {
+            self.wakes.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    fn make_writer(stream: fcgi::RecordType) -> StreamWriter<Vec<u8>> {
+        let writer = Arc::new(Mutex::new(Vec::with_capacity(2048)));
+        let head = fcgi::RecordHeader::new(stream, 1);
+        StreamWriter { writer, lock: None, head, head_idx: 0, orig_len: 0 }
+    }
+
+    #[test]
+    fn writer_interleaved() {
+        let counter = CountWaker::new();
+        let waker = counter.clone().into();
+        let mut cx = Context::from_waker(&waker);
+
+        let bytes: Vec<_> = repeat_with(|| fastrand::u8(..)).take(256).collect();
+        let mut main = make_writer(fcgi::RecordType::Stdout);
+        let mut err = main.clone();
+        err.head.rtype = fcgi::RecordType::Stderr;
+        assert_eq!(err.stream(), fcgi::RecordType::Stderr);
+
+        for amt in [175, 0, 89] {
+            let res = Pin::new(&mut main).poll_write(&mut cx, &bytes[..amt]);
+            assert!(matches!(res, Poll::Ready(Ok(n)) if n == amt));
+        }
+        for amt in [0, 97] {
+            let res = Pin::new(&mut err).poll_write(&mut cx, &bytes[..amt]);
+            assert!(matches!(res, Poll::Ready(Ok(n)) if n == amt));
+        }
+        assert_eq!(counter.wakes(), 0);
+
+        {
+            // Simulate write with locked mutex
+            let _g = main.writer.try_lock_owned().unwrap();
+            let res = Pin::new(&mut main).poll_write(&mut cx, &bytes[..221]);
+            assert!(res.is_pending());
+            // Drop of lock guard calls waker
+        }
+        assert_eq!(counter.wakes(), 1);
+        let res = Pin::new(&mut main).poll_write(&mut cx, &bytes[..221]);
+        assert!(matches!(res, Poll::Ready(Ok(221))));
+
+        let res = Pin::new(&mut err).poll_flush(&mut cx);
+        assert!(matches!(res, Poll::Ready(Ok(()))));
+
+        std::mem::drop(err);
+        let out = Arc::try_unwrap(main.writer)
+            .expect("main should hold the only reference to the writer").into_inner();
+        assert_eq!(out.len(), 632);
+        assert_eq!(&out[..8], b"\x01\x06\x00\x01\x00\xaf\x01\0");
+        assert_eq!(&out[184..192], b"\x01\x06\x00\x01\x00\x59\x07\0");
+        assert_eq!(&out[288..296], b"\x01\x07\x00\x01\x00\x61\x07\0");
+        assert_eq!(&out[400..408], b"\x01\x06\x00\x01\x00\xdd\x03\0");
+    }
+
+    #[test]
+    #[should_panic(expected = "buf shrunk between calls to poll_write")]
+    fn writer_buf_shrink() {
+        let waker = CountWaker::new().into();
+        let mut cx = Context::from_waker(&waker);
+        let mut w = make_writer(fcgi::RecordType::Stderr);
+        assert_eq!(w.stream(), fcgi::RecordType::Stderr);
+
+        {
+            let _g = w.writer.try_lock_owned().unwrap();
+            let res = Pin::new(&mut w).poll_write(&mut cx, &[0x5f; 100]);
+            assert!(res.is_pending());
+        }
+        let res = Pin::new(&mut w).poll_write(&mut cx, &[0x5f; 50]);
+        // should panic above
+        assert!(matches!(res, Poll::Ready(Ok(50))));
+    }
+
+    #[test]
+    #[should_panic(expected = "poll_write called while poll_flush is pending")]
+    fn writer_mixed_poll() {
+        let waker = CountWaker::new().into();
+        let mut cx = Context::from_waker(&waker);
+        let mut w = make_writer(fcgi::RecordType::Stdout);
+        assert_eq!(w.stream(), fcgi::RecordType::Stdout);
+
+        let _g = w.writer.try_lock_owned().unwrap();
+        let res = Pin::new(&mut w).poll_flush(&mut cx);
+        assert!(res.is_pending());
+        let res = Pin::new(&mut w).poll_write(&mut cx, &[0, 58, 172, 9]);
+        // should panic above
+        assert!(res.is_pending());
+    }
+
+    // TODO(msrv): use std::pin::pin once MSRV >= 1.68
+    #[test]
+    fn runner_limit() {
+        let counter = CountWaker::new();
+        let waker = counter.clone().into();
+        let mut cx = Context::from_waker(&waker);
+
+        let config = Config::with_conns(3.try_into().unwrap());
+        let runner = config.async_runner();
+        let mut tokens: Vec<_> = (1..=3).map(|idx| {
+            let fut = runner.get_token();
+            futures_util::pin_mut!(fut);
+            match fut.poll(&mut cx) {
+                Poll::Ready(t) => t,
+                Poll::Pending => panic!("token #{idx} was not available"),
+            }
+        }).collect();
+
+        assert_eq!(counter.wakes(), 0);
+        let fut = runner.get_token();
+        futures_util::pin_mut!(fut);
+        let res = fut.as_mut().poll(&mut cx);
+        assert!(res.is_pending());
+
+        tokens.clear();
+        assert_eq!(counter.wakes(), 1);
+        let res = fut.as_mut().poll(&mut cx);
+        assert!(res.is_ready());
     }
 }
