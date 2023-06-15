@@ -5,38 +5,15 @@ use std::sync::Arc;
 use std::task::{ready, Context, Poll};
 
 use futures_util::io::{AsyncBufRead, AsyncRead, AsyncWrite};
-use futures_util::lock::{Mutex, OwnedMutexGuard, OwnedMutexLockFuture};
+use futures_util::lock::Mutex;
 
 use crate::parser::{self, request, stream, EnvIter};
 use crate::protocol as fcgi;
 use crate::{cgi, Config, ExitStatus};
 
+mod util;
 
-#[derive(Debug)]
-#[must_use = "futures are lazy and do nothing unless polled"]
-enum RepeatableLockFuture<T: ?Sized> {
-    Poll(OwnedMutexLockFuture<T>),
-    Done(OwnedMutexGuard<T>),
-}
-
-impl<T: ?Sized> RepeatableLockFuture<T> {
-    fn new(mutex: Arc<Mutex<T>>) -> Self {
-        Self::Poll(mutex.lock_owned())
-    }
-
-    // Cannot impl std::future::Future due to return type
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<&mut T> {
-        let this = self.get_mut();
-        if let Self::Poll(fut) = this {
-            let g = ready!(Pin::new(fut).poll(cx));
-            *this = Self::Done(g);
-        }
-        match this {
-            Self::Done(g) => Poll::Ready(&mut *g),
-            Self::Poll(_) => unreachable!("RepeatableLockFuture should always be Done here"),
-        }
-    }
-}
+use util::RepeatableLockFuture;
 
 
 /// An unbuffered, `async` writer for output to a FastCGI stream.
