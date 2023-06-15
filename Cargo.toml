@@ -11,7 +11,7 @@ keywords = ["fastcgi", "protocol", "backend", "web"]
 categories = ["network-programming", "web-programming"]
 
 [features]
-async = ["dep:futures-util", "dep:async-lock"]
+async = ["dep:futures-util", "dep:async-lock", "dep:event-listener"]
 log = ["tracing/log"]
 trace-more = []
 
@@ -34,6 +34,7 @@ smallvec = { version = "1.6.0", features = ["union", "const_generics", "write"] 
 compact_str = "0.7.0"
 # Semaphore::acquire_arc is broken in 2.7.0, bump after next release
 async-lock = { version = ">=2.5.0, <2.7.0", optional = true }
+event-listener = { version = "2.5.3", optional = true }
 
 [dev-dependencies]
 fastrand = "2.0.0"

@@ -13,7 +13,7 @@ use crate::{cgi, Config, ExitStatus};
 
 mod util;
 
-use util::RepeatableLockFuture;
+use util::{RepeatableLockFuture, WaitGroup};
 
 
 /// An unbuffered, `async` writer for output to a FastCGI stream.
@@ -572,7 +572,9 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> AsyncBufRead for Request<'_, R
 #[must_use = "tokens only exist to call Token::run"]
 pub struct Token {
     config: Arc<Config>,
-    _g: async_lock::SemaphoreGuardArc,
+    stop_fut: event_listener::EventListener,
+    _sg: async_lock::SemaphoreGuardArc,
+    _tt: util::TaskToken,
 }
 
 impl Token {
@@ -604,7 +606,7 @@ impl Token {
     /// catching them at the `Token::run` boundary. [`Request`] and
     /// [`StreamWriter`] can be treated as unwind-safe provided that none of
     /// their instances survive past the `handler` invocation.
-    pub async fn run<R, W, H, F>(self, mut input: R, mut output: W, mut handler: H)
+    pub async fn run<R, W, H, F>(mut self, mut input: R, mut output: W, mut handler: H)
     where
         R: AsyncRead + Unpin,
         W: AsyncWrite + Unpin,
@@ -613,21 +615,30 @@ impl Token {
     {
         // False positive
         #![allow(clippy::manual_let_else)]
+        use futures_util::future::{select, Either};
         use tracing::Instrument;
 
         let mut rparser = request::Parser::new(&self.config);
         loop {
-            let sparser = match Self::parse_request(rparser, &mut input, &mut output).await {
-                Ok(p) => p,
-                Err(e) if e.kind() == io::ErrorKind::ConnectionReset => {
-                    tracing::debug!("connection closed by remote");
-                    return;
-                },
-                Err(e) => {
-                    let error: &dyn std::error::Error = &e;
-                    tracing::error!(error, "parsing request failed");
-                    return;
-                },
+            let sparser = {
+                let req_fut = Self::parse_request(rparser, &mut input, &mut output);
+                futures_util::pin_mut!(req_fut);
+                match select(&mut self.stop_fut, req_fut).await {
+                    Either::Left(((), _)) => {
+                        tracing::debug!("connection shutdown");
+                        return;
+                    },
+                    Either::Right((Ok(p), _)) => p,
+                    Either::Right((Err(e), _)) if e.kind() == io::ErrorKind::ConnectionReset => {
+                        tracing::debug!("connection closed by remote");
+                        return;
+                    },
+                    Either::Right((Err(e), _)) => {
+                        let error: &dyn std::error::Error = &e;
+                        tracing::error!(error, "parsing request failed");
+                        return;
+                    },
+                }
             };
 
             let span = tracing::warn_span!(
@@ -687,6 +698,7 @@ impl Token {
             let status = parser.parse(read);
             if !status.output.is_empty() {
                 output.write_all(status.output).await?;
+                crate::macros::trace!("management records flushed");
             }
             if status.done {
                 return parser.into_stream_parser().map_err(Into::into);
@@ -704,21 +716,43 @@ impl Token {
 /// task responsible for accepting incoming FastCGI connections. A [`Token`]
 /// must be acquired via `Runner::get_token` **before** accepting a new
 /// connection. It serves as the entrypoint to the rest of the library.
+/// `Runner::shutdown` performs a graceful shutdown of all active connections.
 ///
 /// [`Runner`] instances can be shared across multiple `async` tasks, either by
-/// cloning or via references. Cloned instances share the same connection limit.
-#[derive(Debug, Clone)]
+/// cloning or via references. Cloned instances share a single connection limit,
+/// but must be shut down separately.
+#[derive(Debug)]
 pub struct Runner {
     config: Arc<Config>,
     sema: Arc<async_lock::Semaphore>,
+    stop: event_listener::Event,
+    wg: WaitGroup,
+}
+
+impl Clone for Runner {
+    fn clone(&self) -> Self {
+        let stop = event_listener::Event::new();
+        Self { config: self.config.clone(), sema: self.sema.clone(), stop, wg: WaitGroup::new() }
+    }
 }
 
 impl Runner {
     /// Waits for a [`Token`] to become available and returns it.
-    #[inline]
     pub async fn get_token(&self) -> Token {
-        let g = self.sema.acquire_arc().await;
-        Token { config: self.config.clone(), _g: g }
+        let sg = self.sema.acquire_arc().await;
+        let tt = self.wg.add_task();
+        Token { config: self.config.clone(), stop_fut: self.stop.listen(), _sg: sg, _tt: tt }
+    }
+
+    /// Gracefully shuts down this runner's active FastCGI connections.
+    ///
+    /// All connections are allowed to finish their current request and are
+    /// closed afterwards. The returned future waits until no more open
+    /// connections remain.
+    #[inline]
+    pub fn shutdown(self) -> util::WaitGroupFuture {
+        self.stop.notify(usize::MAX);
+        std::future::IntoFuture::into_future(self.wg)
     }
 }
 
@@ -728,7 +762,8 @@ impl Config {
     #[must_use]
     pub fn async_runner(self) -> Runner {
         let sema = async_lock::Semaphore::new(self.max_conns.get());
-        Runner { config: self.into(), sema: sema.into() }
+        let stop = event_listener::Event::new();
+        Runner { config: self.into(), sema: sema.into(), stop, wg: WaitGroup::new() }
     }
 }
 
