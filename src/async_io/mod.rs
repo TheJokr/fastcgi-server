@@ -898,6 +898,19 @@ mod tests {
     }
 
     // TODO(msrv): use std::pin::pin once MSRV >= 1.68
+    fn make_tokens(amt: usize, runner: &Runner, cx: &mut Context) -> Vec<Token> {
+        (1..=amt)
+            .map(|idx| {
+                let fut = runner.get_token();
+                futures_util::pin_mut!(fut);
+                match fut.poll(cx) {
+                    Poll::Ready(t) => t,
+                    Poll::Pending => panic!("token #{idx} was not available"),
+                }
+            })
+            .collect()
+    }
+
     #[test]
     fn runner_limit() {
         let counter = CountWaker::new();
@@ -906,24 +919,50 @@ mod tests {
 
         let config = Config::with_conns(3.try_into().unwrap());
         let runner = config.async_runner();
-        let mut tokens: Vec<_> = (1..=3).map(|idx| {
-            let fut = runner.get_token();
-            futures_util::pin_mut!(fut);
-            match fut.poll(&mut cx) {
-                Poll::Ready(t) => t,
-                Poll::Pending => panic!("token #{idx} was not available"),
-            }
-        }).collect();
+        let mut tokens = make_tokens(3, &runner, &mut cx);
 
-        assert_eq!(counter.wakes(), 0);
+        // No token available
         let fut = runner.get_token();
         futures_util::pin_mut!(fut);
-        let res = fut.as_mut().poll(&mut cx);
-        assert!(res.is_pending());
+        assert!(fut.as_mut().poll(&mut cx).is_pending());
+        assert_eq!(counter.wakes(), 0);
 
+        // Make tokens available to fut
         tokens.clear();
         assert_eq!(counter.wakes(), 1);
-        let res = fut.as_mut().poll(&mut cx);
-        assert!(res.is_ready());
+        assert!(fut.as_mut().poll(&mut cx).is_ready());
+    }
+
+    #[test]
+    fn runner_shutdown() {
+        use futures_util::FutureExt;
+        let counter = CountWaker::new();
+        let waker = counter.clone().into();
+        let mut cx = Context::from_waker(&waker);
+
+        let config = Config::with_conns(5.try_into().unwrap());
+        let runner = config.async_runner();
+        let mut tokens = make_tokens(2, &runner, &mut cx);
+
+        let res = tokens[0].stop_fut.poll_unpin(&mut cx);
+        assert!(res.is_pending());
+        assert_eq!(counter.wakes(), 0);
+
+        // Shutdown should wake polled stop_fut
+        let fut = runner.shutdown();
+        assert_eq!(counter.wakes(), 1);
+        futures_util::pin_mut!(fut);
+        assert!(fut.as_mut().poll(&mut cx).is_pending());
+
+        // All tokens should be notified of shutdown
+        assert!(tokens.iter_mut().all(
+            |t| t.stop_fut.poll_unpin(&mut cx).is_ready()
+        ));
+        assert_eq!(counter.wakes(), 1);
+
+        // fut should be woken and resolve after tokens are dropped
+        tokens.clear();
+        assert_eq!(counter.wakes(), 2);
+        assert!(fut.as_mut().poll(&mut cx).is_ready());
     }
 }
