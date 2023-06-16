@@ -1,9 +1,9 @@
-use std::future::Future;
 use std::io::{self, IoSlice, Write};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{ready, Context, Poll};
 
+use futures_util::future::BoxFuture;
 use futures_util::io::{AsyncBufRead, AsyncRead, AsyncWrite};
 use futures_util::lock::Mutex;
 
@@ -587,12 +587,13 @@ impl Token {
     /// The connection should not be used by the caller anymore after passing it
     /// to this function.
     ///
-    /// The handler's type `H` is equivalent to a function with signature
-    /// `async fn(&mut Request<R, W>) -> io::Result<ExitStatus>`. An [`Err`]
-    /// result causes the connection to be torn down. This is meant to simplify
-    /// reading from and writing to the request's streams. Use [`Ok(ExitStatus)`]
-    /// with different status codes to signal regular (non-IO-related) exits,
-    /// which permits connection reuse.
+    /// The handler's type `H` is similar to an
+    /// `async fn(&mut Request<R, W>) -> io::Result<ExitStatus>`, but the
+    /// resulting future must be pinned in a [`Box`] until Rust gets proper
+    /// `async` traits. An [`Err`] result causes the connection to be torn down.
+    /// This is meant to simplify reading from and writing to the request's
+    /// streams. Use [`Ok(ExitStatus)`] with different status codes to signal
+    /// regular (non-IO-related) exits, which permits connection reuse.
     ///
     /// A graceful response to the request requires all [`StreamWriters`] to be
     /// dropped when the `handler` returns. Otherwise, the request will be left
@@ -606,12 +607,13 @@ impl Token {
     /// catching them at the `Token::run` boundary. [`Request`] and
     /// [`StreamWriter`] can be treated as unwind-safe provided that none of
     /// their instances survive past the `handler` invocation.
-    pub async fn run<R, W, H, F>(mut self, mut input: R, mut output: W, mut handler: H)
+    pub async fn run<R, W, H>(mut self, mut input: R, mut output: W, mut handler: H)
     where
         R: AsyncRead + Unpin,
         W: AsyncWrite + Unpin,
-        H: FnMut(&mut Request<R, W>) -> F,
-        F: Future<Output = io::Result<ExitStatus>>,
+        // TODO(type_alias_impl_trait): replace this with an async trait (GAT + alias impl)
+        // Blanket impl H of a trait with GAT currently breaks the compiler :(
+        H: for<'a> FnMut(&'a mut Request<R, W>) -> BoxFuture<'a, io::Result<ExitStatus>>,
     {
         // False positive
         #![allow(clippy::manual_let_else)]
@@ -770,6 +772,7 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
+    use std::future::Future;
     use std::iter::repeat_with;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::task::Wake;
