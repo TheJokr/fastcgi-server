@@ -791,14 +791,14 @@ mod tests {
     // parsers to a network connection. We test that glue code outside of Rust's
     // test framework with a real webserver in the loop.
 
-    struct CountWaker {
+    pub(super) struct CountWaker {
         wakes: AtomicUsize,
     }
     impl CountWaker {
-        fn new() -> Arc<Self> {
+        pub(super) fn new() -> Arc<Self> {
             Arc::new(Self { wakes: 0.into() })
         }
-        fn wakes(&self) -> usize {
+        pub(super) fn wakes(&self) -> usize {
             self.wakes.load(Ordering::Relaxed)
         }
     }

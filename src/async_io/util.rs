@@ -130,16 +130,76 @@ impl fmt::Debug for TaskToken {
 impl fmt::Debug for WaitGroupFuture {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let tasks = self.0.strong_count();
-        f.debug_struct("WaitGroupFuture")
-            .field("tasks", &tasks)
-            .finish()
+        f.debug_struct("WaitGroupFuture").field("tasks", &tasks).finish()
     }
 }
 
 impl fmt::Debug for WaitGroup {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("WaitGroup")
-            .field("tasks", &self.tasks())
-            .finish()
+        f.debug_struct("WaitGroup").field("tasks", &self.tasks()).finish()
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::super::tests::CountWaker;
+    use super::*;
+
+    #[test]
+    fn mutex_lock() {
+        let counter = CountWaker::new();
+        let waker = counter.clone().into();
+        let mut cx = Context::from_waker(&waker);
+        let mutex = Arc::new(Mutex::new(()));
+
+        {
+            let mut fut = RepeatableLockFuture::new(mutex.clone());
+            let mut fut = Pin::new(&mut fut);
+            assert!(fut.as_mut().poll(&mut cx).is_ready());
+            // Repeated poll should be ok
+            assert!(fut.as_mut().poll(&mut cx).is_ready());
+        }
+
+        {
+            let g = mutex.try_lock_owned().unwrap();
+            let mut fut = RepeatableLockFuture::new(mutex);
+            let mut fut = Pin::new(&mut fut);
+            assert!(fut.as_mut().poll(&mut cx).is_pending());
+
+            // Dropping the guard should wake fut
+            std::mem::drop(g);
+            assert_eq!(counter.wakes(), 1);
+            assert!(fut.as_mut().poll(&mut cx).is_ready());
+            assert!(fut.as_mut().poll(&mut cx).is_ready());
+        }
+    }
+
+    #[test]
+    fn waitgroup() {
+        use futures_util::FutureExt;
+        let counter = CountWaker::new();
+        let waker = counter.clone().into();
+        let mut cx = Context::from_waker(&waker);
+
+        let wg = WaitGroup::new();
+        let mut tasks: Vec<_> = (0..7).map(|_| wg.add_task()).collect();
+        assert_eq!(wg.tasks(), 7);
+        assert_eq!(format!("{wg:?}"), "WaitGroup { tasks: 7 }");
+
+        tasks.truncate(4);
+        assert_eq!(wg.tasks(), 4);
+        assert_eq!(format!("{wg:?}"), "WaitGroup { tasks: 4 }");
+
+        let mut fut = std::future::IntoFuture::into_future(wg);
+        assert!(fut.poll_unpin(&mut cx).is_pending());
+        assert_eq!(format!("{fut:?}"), "WaitGroupFuture { tasks: 4 }");
+
+        // Only the last dropped token should wake fut
+        tasks.truncate(1);
+        assert_eq!(counter.wakes(), 0);
+        tasks.clear();
+        assert_eq!(counter.wakes(), 1);
+        assert!(fut.poll_unpin(&mut cx).is_ready());
     }
 }
