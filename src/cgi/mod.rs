@@ -229,12 +229,23 @@ impl<'a> From<Cow<'a, str>> for OwnedVarName {
 }
 
 #[cfg(feature = "http")]
-impl From<http::header::HeaderName> for OwnedVarName {
+impl From<&http::header::HeaderName> for OwnedVarName {
     /// Converts an [`http::HeaderName`] into an [`OwnedVarName`] by mapping
     /// the header to its CGI/1.1 representation.
-    fn from(v: http::header::HeaderName) -> Self {
+    fn from(v: &http::header::HeaderName) -> Self {
+        let head = v.as_str();
         let mut var = CompactString::new_inline("HTTP_");
-        var.push_str(v.as_str());
+        var.reserve(head.len());
+
+        // Swap '-' for '_' without allocating
+        let mut parts = head.split('-');
+        if let Some(p) = parts.next() {
+            var.push_str(p);
+        }
+        for p in parts {
+            var.push('_');
+            var.push_str(p);
+        }
         Self::from_compact(var)
     }
 }
@@ -492,6 +503,35 @@ mod tests {
             let name = name.to_owned();
             let var = OwnedVarName::from(name);
             assert_eq!(var.as_ref(), exp);
+        }
+    }
+
+    #[cfg(feature = "http")]
+    #[test]
+    fn http_conv() {
+        use http::header;
+        const STATIC_HTTP: &[(http::header::HeaderName, StaticVarName)] = &[
+            (header::ACCESS_CONTROL_REQUEST_HEADERS, HTTP_ACCESS_CONTROL_REQUEST_HEADERS),
+            (header::USER_AGENT, HTTP_USER_AGENT),
+            (header::IF_NONE_MATCH, HTTP_IF_NONE_MATCH),
+            (header::CACHE_CONTROL, HTTP_CACHE_CONTROL),
+            (header::ACCEPT_LANGUAGE, HTTP_ACCEPT_LANGUAGE),
+        ];
+        for (head, exp) in STATIC_HTTP {
+            let var = OwnedVarName::from(head);
+            assert!(matches!(var, OwnedVarName(VarNameInner::Static(s)) if s == *exp));
+        }
+
+        const STR_HTTP: &[(http::header::HeaderName, &str)] = &[
+            (header::ACCESS_CONTROL_ALLOW_ORIGIN, "HTTP_ACCESS_CONTROL_ALLOW_ORIGIN"),
+            (header::ETAG, "HTTP_ETAG"),
+            (header::STRICT_TRANSPORT_SECURITY, "HTTP_STRICT_TRANSPORT_SECURITY"),
+            (header::ALT_SVC, "HTTP_ALT_SVC"),
+            (header::REFERER, "HTTP_REFERER"),
+        ];
+        for (head, exp) in STR_HTTP {
+            let var = OwnedVarName::from(head);
+            assert_eq!(var.as_ref(), *exp);
         }
     }
 }
