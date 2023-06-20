@@ -51,6 +51,15 @@ jobs:
         if: "!cancelled() && steps.run-lint.conclusion != 'skipped'"
         run: cargo test --all-features -- --color=always
 
+      - name: Build end-to-end examples
+        run: cargo build --profile e2e-test --examples --all-features
+      - uses: actions/upload-artifact@v3
+        with:
+          name: examples-bin
+          path: target/e2e-test/examples/
+          retention-days: 7
+        continue-on-error: true
+
   test-other:
     if: inputs.test-all || github.event_name == 'schedule'
     strategy:
