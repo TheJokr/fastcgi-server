@@ -1,4 +1,3 @@
-use std::future::Future;
 use std::io::{self, Write};
 use std::net::Ipv4Addr;
 
@@ -8,8 +7,7 @@ use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use tracing::Instrument;
 
 use fastcgi_server::protocol as fcgi;
-use fastcgi_server::{async_io, cgi};
-use fastcgi_server::{Config, ExitStatus};
+use fastcgi_server::{async_io, cgi, Config, ExitStatus};
 
 
 // Shorthands for the types making up a `Request`. The `Compat` wrapper around the
@@ -276,7 +274,7 @@ async fn server(runner: &mut async_io::Runner) -> io::Result<()> {
 
 /// Waits for a signal to shut the FastCGI server down.
 #[cfg(not(unix))]
-fn quit() -> impl Future<Output = io::Result<()>> {
+fn quit() -> impl std::future::Future<Output = io::Result<()>> {
     tokio::signal::ctrl_c()
 }
 
@@ -284,9 +282,10 @@ fn quit() -> impl Future<Output = io::Result<()>> {
 #[cfg(unix)]
 async fn quit() -> io::Result<()> {
     use tokio::signal::unix::{signal, SignalKind};
+    let mut term = signal(SignalKind::terminate())?;
     tokio::select! {
         r = tokio::signal::ctrl_c() => r,
-        _ = signal(SignalKind::terminate())?.recv() => Ok(()),
+        _ = term.recv() => Ok(()),
     }
 }
 
