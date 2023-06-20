@@ -56,8 +56,9 @@ jobs:
       - uses: actions/upload-artifact@v3
         with:
           name: examples-bin
-          path: target/e2e-test/examples/
           retention-days: 7
+          path: |
+            target/e2e-test/examples/hello-cgi
         continue-on-error: true
 
   test-other:
