@@ -62,6 +62,8 @@ fn parse_request<'a>(request: &'a Request) -> Result<(http::Method, &'a str), Ex
 }
 
 
+const HELLO_CGI: &[u8] = b"hello-cgi-example";
+
 /// Print the CGI environment for arbitrary GET and POST requests.
 async fn handle_env(request: &mut Request<'_, '_, '_>) -> io::Result<ExitStatus> {
     // Wait for the FastCGI request to allow writes, otherwise request.output_stream may panic
@@ -71,7 +73,7 @@ async fn handle_env(request: &mut Request<'_, '_, '_>) -> io::Result<ExitStatus>
     // a std::io::Write instance, so we can't pass our AsyncWrite directly.
     let headers: [(&[u8], &[u8]); 3] = [
         (http::header::CONTENT_TYPE.as_ref(), b"text/plain"),
-        (b"x-powered-by", b"hello-cgi-example"),
+        (b"x-powered-by", HELLO_CGI),
         (http::header::VARY.as_ref(), b"*"),
     ];
     let headers = headers.iter().copied();
@@ -101,9 +103,11 @@ async fn handle_env(request: &mut Request<'_, '_, '_>) -> io::Result<ExitStatus>
 async fn handle_redirect(request: &mut Request<'_, '_, '_>) -> io::Result<ExitStatus> {
     request.writeable().await?;
 
+    // We match the query string literally in this example,
+    // but usually you would parse it into some type of map.
     let mut resp = [0; 512];
     let len = match request.get_var(cgi::QUERY_STRING) {
-        // A redirect with custom status code, but no body. This is non-standard.
+        // A redirect with custom status code, but no body. This is non-standard!
         Some(b"type=custom") => {
             let headers: [(&[u8], &[u8]); 1] =
                 [(http::header::LOCATION.as_ref(), b"https://example.com/")];
@@ -117,7 +121,8 @@ async fn handle_redirect(request: &mut Request<'_, '_, '_>) -> io::Result<ExitSt
                 (http::header::CONTENT_TYPE.as_ref(), b"text/plain; charset=utf-8"),
                 (http::header::LOCATION.as_ref(), b"/local?from=redirect-body"),
             ];
-            let body = "Content moved to </local>. Redirecting...".as_bytes();
+            let headers = headers.iter().copied();
+            let body = "Content moved to </local>. Redirecting...\n".as_bytes();
             let mut dest = &mut resp[..];
             cgi::response::write_headers(&mut dest, http::StatusCode::MOVED_PERMANENTLY, headers)
                 .and_then(|h| dest.write_all(body).and(Ok(h + body.len())))
@@ -151,12 +156,12 @@ async fn handle_echo(request: &mut Request<'_, '_, '_>) -> io::Result<ExitStatus
     let headers: [(&[u8], &[u8]); 3] = [
         (http::header::CONTENT_TYPE.as_ref(), content_type),
         (http::header::CACHE_CONTROL.as_ref(), b"no-store"),
-        (b"x-powered-by", b"hello-cgi-example"),
+        (b"x-powered-by", HELLO_CGI),
     ];
 
     // Unlike in the previous two handlers, here we include a user-supplied value
-    // in our headers. It is thus not impossible that our buffer is too small.
-    // However, any reasonable value for Content-Type will fit into 512 bytes.
+    // in our headers. Our buffer could thus be too small. However, any reasonable
+    // value for Content-Type will fit into 512 bytes.
     let headers = headers.iter().copied();
     let mut head = [0; 512];
     let len = match cgi::response::write_headers(&mut head[..], http::StatusCode::OK, headers) {
@@ -168,7 +173,8 @@ async fn handle_echo(request: &mut Request<'_, '_, '_>) -> io::Result<ExitStatus
         },
     };
 
-    // Write out the headers and use futures' copy utility for echoing the body
+    // Write out the headers and use futures' copy utility for echoing the body.
+    // The utility takes care to flush the writer once the input stream is done.
     let mut w = request.output_stream(fcgi::RecordType::Stdout);
     w.write_all(&head[..len]).await?;
     let copied = futures_util::io::copy_buf(&mut *request, &mut w).await?;
@@ -176,7 +182,7 @@ async fn handle_echo(request: &mut Request<'_, '_, '_>) -> io::Result<ExitStatus
     // CONTENT_LENGTH *should* match the stream length. If it doesn't,
     // something is wrong either with the webserver or this library.
     let content_len: u64 =
-        request.get_var_str(cgi::CONTENT_LENGTH).and_then(|l| l.parse().ok()).unwrap_or(0);
+        request.get_var_str(cgi::CONTENT_LENGTH).and_then(|v| v.parse().ok()).unwrap_or(0);
     if copied != content_len {
         tracing::warn!(read = copied, expected = content_len, "echo input stream ended short");
     }
@@ -187,14 +193,14 @@ async fn handle_echo(request: &mut Request<'_, '_, '_>) -> io::Result<ExitStatus
 async fn fallback(request: &mut Request<'_, '_, '_>) -> io::Result<ExitStatus> {
     request.writeable().await?;
 
-    // Essentially the same steps as `handle_redirect`: build up headers, body,
-    // and status code; compose everything into a stack buffer; and finally write
-    // everything out to the FastCGI client.
+    // Essentially the same steps as `handle_redirect`: build up headers, a body,
+    // and a status code; compose everything into a stack buffer; and finally write
+    // the response into the output stream.
     let (status, body) = match request.get_var(cgi::REQUEST_METHOD) {
-        Some(b"GET" | b"POST" | b"HEAD") => {
-            (http::StatusCode::NOT_FOUND, b"Unknown URL route".as_slice())
+        Some(b"GET" | b"POST") => {
+            (http::StatusCode::NOT_FOUND, b"Unknown URL route\n".as_slice())
         },
-        _ => (http::StatusCode::NOT_IMPLEMENTED, b"HTTP method not implemented".as_slice()),
+        _ => (http::StatusCode::NOT_IMPLEMENTED, b"HTTP method not implemented\n".as_slice()),
     };
     let headers: [(&[u8], &[u8]); 1] =
         [(http::header::CONTENT_TYPE.as_ref(), b"text/plain; charset=utf-8")];
