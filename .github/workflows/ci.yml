@@ -61,11 +61,25 @@ jobs:
             target/e2e-test/examples/hello-cgi
         continue-on-error: true
 
+  test-msrv:
+    name: Test on MSRV (1.66)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Rust toolchain
+        run: rustup default 1.66
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: cargo test --all-features -- --color=always
+
   test-other:
     if: inputs.test-all || github.event_name == 'schedule'
     strategy:
       matrix:
-        channel: ["1.66", "beta"]
+        channel: [beta]
       fail-fast: false
 
     name: Test on Rust ${{ matrix.channel }}
