@@ -1,0 +1,326 @@
+{
+	"info": {
+		"_postman_id": "f6e0defb-f743-4ad7-b36c-4297e46078c0",
+		"name": "fastcgi-server E2E Tests",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "28098980"
+	},
+	"item": [
+		{
+			"name": "Redirects",
+			"item": [
+				{
+					"name": "Simple redirect",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"const server = pm.response.headers.get(\"server\");\r",
+									"if (/^apache/i.test(server)) {\r",
+									"    console.warn(\"Skipping tests, Apache httpd does not support simple CGI redirects\");\r",
+									"    return;\r",
+									"}\r",
+									"\r",
+									"pm.test(\"Response is a simple CGI redirect\", () => {\r",
+									"    pm.response.to.have.status(302);\r",
+									"    pm.response.to.have.header(\"location\");\r",
+									"});\r",
+									"\r",
+									"pm.test(\"Redirect is absolute\", () => {\r",
+									"    pm.expect(pm.response.headers.get(\"location\")).to.match(/^https?:\\/\\//);\r",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"followRedirects": false
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/redirect",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"redirect"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Document redirect",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Response is a custom redirect\", () => {\r",
+									"    pm.response.to.be.redirection;\r",
+									"    pm.response.to.not.have.status(302);\r",
+									"    pm.response.to.have.header(\"location\");\r",
+									"});\r",
+									"\r",
+									"pm.test(\"Body contains a document\", () => {\r",
+									"    pm.expect(pm.response.headers.get(\"content-type\")).to.match(/^text\\/plain(;|$)/);\r",
+									"    pm.expect(pm.response.text()).to.match(/^Content moved to /);\r",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"followRedirects": false
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/redirect?type=body",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"redirect"
+							],
+							"query": [
+								{
+									"key": "type",
+									"value": "body"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Document redirect without body",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Response is a custom redirect\", () => {\r",
+									"    pm.response.to.be.redirection;\r",
+									"    pm.response.to.not.have.status(302);\r",
+									"    pm.response.to.have.header(\"location\");\r",
+									"});\r",
+									"\r",
+									"pm.test(\"Redirect has no body\", () => {\r",
+									"    pm.response.to.not.have.header(\"content-type\");\r",
+									"    pm.response.to.not.have.body();\r",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"protocolProfileBehavior": {
+						"followRedirects": false
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/redirect?type=custom",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"redirect"
+							],
+							"query": [
+								{
+									"key": "type",
+									"value": "custom"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "List CGI environment",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Response is valid\", () => {\r",
+							"    pm.response.to.be.ok;\r",
+							"    pm.response.to.have.header(\"content-type\", \"text/plain\");\r",
+							"    pm.response.to.have.header(\"x-powered-by\", \"hello-cgi-example\");\r",
+							"    pm.response.to.have.body();\r",
+							"});\r",
+							"\r",
+							"const body_lines = pm.response.text()\r",
+							"    .split(\"\\n\")\r",
+							"    .filter(l => l.length > 0);\r",
+							"\r",
+							"pm.test(\"Body displays CGI environment\", () => {\r",
+							"    const req = pm.request.url;\r",
+							"    pm.expect(body_lines).to.include.members([\r",
+							"        \"GATEWAY_INTERFACE=CGI/1.1\",\r",
+							"        \"REQUEST_METHOD=GET\",\r",
+							"        `SCRIPT_NAME=${req.getPath()}`,\r",
+							"        `QUERY_STRING=${req.getQueryString()}`,\r",
+							"    ]);\r",
+							"});\r",
+							"\r",
+							"pm.test(\"CGI environment contains request headers\", () => {\r",
+							"    const vars = pm.request.headers.map(h => {\r",
+							"        const name = h.key.replaceAll(\"-\", \"_\").toUpperCase();\r",
+							"        return `HTTP_${name}=${h.value}`;\r",
+							"    });\r",
+							"    pm.expect(body_lines).to.include.members(vars);\r",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/show-me-the-default?any_key=someValue",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"show-me-the-default"
+					],
+					"query": [
+						{
+							"key": "any_key",
+							"value": "someValue"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Echo request body",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Response is valid\", () => {\r",
+							"    pm.response.to.be.ok;\r",
+							"    pm.response.to.have.header(\"content-type\", pm.request.headers.get(\"content-type\"));\r",
+							"    pm.response.to.have.header(\"x-powered-by\", \"hello-cgi-example\");\r",
+							"});\r",
+							"\r",
+							"pm.test(\"Body matches request\", () => {\r",
+							"    pm.response.to.have.body(pm.request.body.raw);\r",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{{$randomLoremParagraphs}}"
+				},
+				"url": {
+					"raw": "{{base_url}}/echo",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"echo"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Unknown route",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Response is Not Found\", () => {\r",
+							"    pm.response.to.be.notFound;\r",
+							"    pm.expect(pm.response.headers.get(\"content-type\")).to.match(/^text\\/plain(;|$)/);\r",
+							"    pm.response.to.have.body(\"Unknown URL route\\n\");\r",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{{$randomWords}}"
+				},
+				"url": {
+					"raw": "{{base_url}}/no-handler-for-this-route?now={{$isoTimestamp}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"no-handler-for-this-route"
+					],
+					"query": [
+						{
+							"key": "now",
+							"value": "{{$isoTimestamp}}"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Unknown method",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Response is Not Implemented\", () => {\r",
+							"    pm.response.to.have.status(501);\r",
+							"    pm.expect(pm.response.headers.get(\"content-type\")).to.match(/^text\\/plain(;|$)/);\r",
+							"    pm.expect(pm.response.text()).to.include(\"method not implemented\")\r",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "PATCH",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/unknownPatch",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"unknownPatch"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
