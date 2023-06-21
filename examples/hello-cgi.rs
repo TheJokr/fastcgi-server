@@ -197,7 +197,7 @@ async fn fallback(request: &mut Request<'_, '_, '_>) -> io::Result<ExitStatus> {
     // and a status code; compose everything into a stack buffer; and finally write
     // the response into the output stream.
     let (status, body) = match request.get_var(cgi::REQUEST_METHOD) {
-        Some(b"GET" | b"POST") => {
+        Some(b"GET" | b"POST" | b"PUT" | b"DELETE") => {
             (http::StatusCode::NOT_FOUND, b"Unknown URL route\n".as_slice())
         },
         _ => (http::StatusCode::NOT_IMPLEMENTED, b"HTTP method not implemented\n".as_slice()),
