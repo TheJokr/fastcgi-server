@@ -28,4 +28,7 @@ for srv in "${!servers[@]}"; do
     kill %2 %1
     wait -f
     echo '::endgroup::'
+
+    # Avoid spurious socket errors between different servers
+    sleep 0.2s
 done
