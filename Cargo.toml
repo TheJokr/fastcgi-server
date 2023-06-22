@@ -47,11 +47,6 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 
-[profile.e2e-test]
-inherits = "dev"
-opt-level = 2
-incremental = false
-
 [[example]]
 name = "hello-cgi"
 required-features = ["async", "http"]
