@@ -109,6 +109,9 @@ impl Config {
     /// documented defaults.
     #[must_use = "creating a Config is not free and has no side effects"]
     pub fn new() -> Self {
+        // Panic is unreachable
+        #![allow(clippy::missing_panics_doc)]
+
         let concurrency = std::thread::available_parallelism()
             .unwrap_or(1.try_into().expect("fallback should be nonzero"));
         tracing::debug!(concurrency, "concurrency detected");

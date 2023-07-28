@@ -358,6 +358,8 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Request<'a, R, W> {
     /// Additionally, any [`parser::Error`] during protocol parsing is
     /// converted into an [`io::Error`] with an appropriate [`io::ErrorKind`].
     pub async fn writeable(&mut self) -> io::Result<()> {
+        // Panic is unreachable
+        #![allow(clippy::missing_panics_doc)]
         use std::future::poll_fn;
         if self.writeable {
             return Ok(());
@@ -422,7 +424,10 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Request<'a, R, W> {
     /// [`parser::Error::AbortRequest`]. The latter variant is handled
     /// internally.
     pub async fn close(mut self, status: ExitStatus) -> io::Result<(request::Parser<'a>, R, W)> {
+        // Panic is unreachable
+        #![allow(clippy::missing_panics_doc)]
         use futures_util::AsyncWriteExt;
+
         // Prepare request for shutdown
         match self.writeable().await {
             Ok(_) => {},

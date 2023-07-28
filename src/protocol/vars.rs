@@ -53,6 +53,10 @@ impl ProtocolVariables {
     ///
     /// The canonical [`BytesVec`] implementation is [`Vec<u8>`], but there may
     /// also be other implementors. See the trait documentation for details.
+    ///
+    /// # Panics
+    /// Panics if appending to the [`BytesVec`] fails, which by definition of a
+    /// [`Vec`] should be impossible.
     pub fn write_response<V: BytesVec>(self, out: &mut V, config: &Config) -> usize {
         // Reserve space for the header in out, which may already contain data
         let start = out.len();
