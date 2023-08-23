@@ -434,7 +434,7 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Request<'a, R, W> {
 
         // Prepare request for shutdown
         match self.writeable().await {
-            Ok(_) => {},
+            Ok(()) => {},
             Err(e) if e.kind() == io::ErrorKind::ConnectionAborted => { /* Ignore */ },
             Err(e) => return Err(e),
         }
