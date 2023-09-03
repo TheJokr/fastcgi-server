@@ -224,13 +224,13 @@ async fn main() {
     init_tracing();
     // Allow up to 10 concurrent connections on our single-threaded runtime
     let config = Config::with_conns(10.try_into().unwrap());
-    let mut runner = config.async_runner();
+    let runner = config.async_runner();
 
     // Listen for FastCGI connections until we receive a quit signal
     let res = tokio::select! {
         biased;  // poll in order, so quit() future first
         r = quit() => r,
-        r = server(&mut runner) => r,
+        r = server(&runner) => r,
     };
     if let Err(e) = res {
         let error: &dyn std::error::Error = &e;
@@ -243,7 +243,7 @@ async fn main() {
 }
 
 /// Runs the FastCGI server on localhost:9000.
-async fn server(runner: &mut async_io::Runner) -> io::Result<()> {
+async fn server(runner: &async_io::Runner) -> io::Result<()> {
     let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 9000)).await?;
     let local = listener.local_addr()?;
     tracing::info!(protocol = "tcp", %local, "server created");
