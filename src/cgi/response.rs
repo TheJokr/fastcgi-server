@@ -11,9 +11,16 @@ use std::io::{self, Write};
 ///
 /// The format of `loc` is not verified by this function. Other crates like
 /// [`http::Uri`] exist for this purpose. Furthermore, CGI's simple redirect
-/// format forbids specifying a non-`302 Found` HTTP status code and additional
+/// format forbids specifying a non-`302 Found` HTTP status code or additional
 /// headers. Use [`write_headers`] for custom redirect responses using the
 /// `Location` header.
+///
+/// # Webserver Support
+/// Our tests with nginx, lighttpd, and Apache httpd show that none of them
+/// handle local redirects internally. nginx and lighttpd convert them into
+/// client-side redirects instead. Apache does not support simple CGI/1.1
+/// redirects in either form and sends them to the client as regular 200 OK
+/// responses. This function **must not be used with Apache httpd**.
 ///
 /// # Errors
 /// Any errors from [`Write::write_all`] are forwarded to the caller.

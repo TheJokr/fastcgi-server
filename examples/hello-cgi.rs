@@ -128,7 +128,9 @@ async fn handle_redirect(request: &mut Request<'_, '_, '_>) -> io::Result<ExitSt
                 .and_then(|h| dest.write_all(body).and(Ok(h + body.len())))
         },
 
-        // A local redirect that should be handled inside the webserver
+        // A local redirect that should be handled inside the webserver, though many
+        // popular implementations do not support this. Apache httpd does not support
+        // cgi::response::simple_redirect at all!
         Some(b"type=local") => {
             cgi::response::simple_redirect(&mut resp[..], "/local?from=redirect")
         },
