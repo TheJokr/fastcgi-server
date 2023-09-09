@@ -31,7 +31,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       # Runner's default (stable) rustc is fine
       - uses: Swatinem/rust-cache@v2
       - name: Install SARIF tools
@@ -78,7 +78,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Setup Rust toolchain
         run: rustup default 1.66
       - uses: Swatinem/rust-cache@v2
@@ -110,7 +110,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Setup Rust toolchain
         run: |-
           rustup default ${{ matrix.channel }}
