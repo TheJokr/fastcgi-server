@@ -275,7 +275,8 @@ impl<'a> Parser<'a> {
             self.buffer.copy_within(self.parsed_start..self.gap_start, 0);
         }
         // [parsed_start, gap_start) moved to [0, gap_start - parsed_start)
-        self.gap_start -= std::mem::take(&mut self.parsed_start);
+        self.gap_start -= self.parsed_start;
+        self.parsed_start = 0;
 
         if self.gap_start < self.raw_start && self.raw_start < self.free_start {
             self.buffer.copy_within(self.raw_start..self.free_start, self.gap_start);

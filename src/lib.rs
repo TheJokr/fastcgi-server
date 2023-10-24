@@ -143,7 +143,7 @@ impl Config {
         // Align to multiple of 8 bytes to match FastCGI recommended padding
         match self.buffer_size.checked_add(7) {
             Some(r) => r & !7,
-            None => self.buffer_size,
+            None => usize::MAX,
         }
     }
 }
