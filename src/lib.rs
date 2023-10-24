@@ -185,6 +185,7 @@ impl ExitStatus {
 
 impl Default for ExitStatus {
     /// Returns an [`ExitStatus`] indicating success.
+    #[inline]
     fn default() -> Self {
         Self::SUCCESS
     }

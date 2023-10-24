@@ -546,6 +546,7 @@ impl State {
 /// An intermediate result emitted by `Parser::parse` when action is required
 /// from the caller.
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 #[must_use = "Yield may contain output, which must be written out"]
 pub struct Yield<'a> {
     /// Indicates whether the [`Parser`] reached a final parsing state.

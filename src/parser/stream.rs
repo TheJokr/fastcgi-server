@@ -11,6 +11,7 @@ type ControlFlow = std::ops::ControlFlow<()>;
 
 /// An output report from `Parser::parse`.
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub struct Status {
     /// The number of bytes written into `dest` (or `Parser::stream_buffer`,
     /// if the former is [`None`]).
@@ -59,7 +60,7 @@ fn cmp_input_streams(
     recv: fcgi::RecordType,
     exp: Option<fcgi::RecordType>,
 ) -> Ordering {
-    // None is never followed by anything
+    // None always comes after all other stream types
     let Some(exp) = exp else { return Ordering::Less; };
     debug_assert!(recv.is_input_stream());
     debug_assert!(exp.is_input_stream());
