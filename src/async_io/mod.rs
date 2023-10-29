@@ -581,7 +581,7 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> AsyncBufRead for Request<'_, R
 #[must_use = "tokens only exist to call Token::run"]
 pub struct Token {
     config: Arc<Config>,
-    stop_fut: event_listener::EventListener,
+    stop_fut: Pin<Box<event_listener::EventListener>>,
     _sg: async_lock::SemaphoreGuardArc,
     _tt: util::TaskToken,
 }
@@ -634,7 +634,7 @@ impl Token {
             let sparser = {
                 let req_fut = Self::parse_request(rparser, &mut input, &mut output);
                 futures_util::pin_mut!(req_fut);
-                match select(&mut self.stop_fut, req_fut).await {
+                match select(self.stop_fut.as_mut(), req_fut).await {
                     Either::Left(((), _)) => {
                         tracing::debug!("connection shutdown");
                         return;
