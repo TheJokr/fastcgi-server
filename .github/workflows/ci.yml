@@ -57,14 +57,14 @@ jobs:
         run: ci/test-e2e.sh
       - name: Upload e2e-logs on failure
         if: "!cancelled() && steps.run-e2e.conclusion == 'failure'"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: e2e-logs-stable
           path: e2e-logs
         continue-on-error: true
 
       - name: Upload example binaries
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: examples-bin
           retention-days: 7
@@ -92,7 +92,7 @@ jobs:
         run: ci/test-e2e.sh
       - name: Upload e2e-logs on failure
         if: "!cancelled() && steps.run-e2e.conclusion == 'failure'"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: e2e-logs-msrv
           path: e2e-logs
@@ -128,7 +128,7 @@ jobs:
         run: ci/test-e2e.sh
       - name: Upload e2e-logs on failure
         if: "!cancelled() && steps.run-e2e.conclusion == 'failure'"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: e2e-logs-${{ matrix.channel }}
           path: e2e-logs
