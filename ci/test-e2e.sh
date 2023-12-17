@@ -22,13 +22,13 @@ for srv in "${!servers[@]}"; do
     echo "::group::Test with ${srv}"
     RUST_LOG=trace target/debug/examples/hello-cgi 2> "e2e-logs/hello-cgi-${srv}.log" &
     ${servers["$srv"]} 2> "e2e-logs/${srv}.log" &
-
-    # Avoid starting tests before server is up
-    sleep 0.2s
     newman run ci/e2e.postman_collection --env-var 'base_url=localhost:8080' \
         --color on --timeout 600000
 
     kill %2 %1
     wait -f
     echo '::endgroup::'
+
+    # Avoid spurious socket errors between different servers
+    sleep 0.4s
 done
