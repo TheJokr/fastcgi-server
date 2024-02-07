@@ -60,6 +60,8 @@ impl Drop for WaitGroupInner {
 /// A token to track the number of active tasks in a [`WaitGroup`].
 ///
 /// Cloning an existing [`TaskToken`] is equivalent to `WaitGroup::add_task`.
+// TODO(1.77): false positive (Arc has Drop impl), remove after fix is merged
+#[allow(dead_code)]
 #[derive(Clone)]
 #[must_use = "TaskToken must be kept alive until the end of the task"]
 pub(crate) struct TaskToken(Arc<WaitGroupInner>);

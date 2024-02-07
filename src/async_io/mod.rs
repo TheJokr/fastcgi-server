@@ -184,10 +184,6 @@ impl<'a, R, W> Request<'a, R, W> {
     /// `async` [`Request`].
     #[must_use]
     pub fn new(inner: stream::Parser<'a>, input: R, output: W) -> Self {
-        // False positive
-        // TODO(1.73): remove after fix is merged
-        #![allow(unknown_lints, clippy::arc_with_non_send_sync)]
-
         let output = Arc::new(Mutex::new(output));
         let mut req = Self { parser: inner, input, output, lock: None, writeable: false };
         if req.role().input_streams().len() <= 1 {
