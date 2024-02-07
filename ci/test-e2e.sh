@@ -30,5 +30,5 @@ for srv in "${!servers[@]}"; do
     echo '::endgroup::'
 
     # Avoid spurious socket errors between different servers
-    sleep 0.4s
+    sleep 1s
 done
