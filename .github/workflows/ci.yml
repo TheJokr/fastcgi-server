@@ -21,7 +21,8 @@ defaults:
 env:
   CARGO_TERM_COLOR: always
   # Fail CI on any warnings
-  RUSTFLAGS: "-D warnings"
+  # TODO(msrv): configure multiple_crate_versions lint via clippy.toml
+  RUSTFLAGS: "-D warnings -A clippy::multiple_crate_versions"
 
 jobs:
   test-stable:
