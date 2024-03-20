@@ -66,7 +66,7 @@ pub enum StaticVarName {
     HTTPS,
 
     // Common end-to-end HTTP request headers (from MDN)
-    // See https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers
+    // See <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers>
     HTTP_ACCEPT,
     HTTP_ACCEPT_CHARSET,
     HTTP_ACCEPT_ENCODING,
@@ -76,7 +76,7 @@ pub enum StaticVarName {
     HTTP_ACCESS_CONTROL_REQUEST_HEADERS,
     HTTP_ACCESS_CONTROL_REQUEST_METHOD,
     HTTP_AUTHORIZATION,
-    /// W3C baggage propagation (https://www.w3.org/TR/baggage/)
+    /// W3C baggage propagation (<https://www.w3.org/TR/baggage/>)
     HTTP_BAGGAGE,
     HTTP_CACHE_CONTROL,
     HTTP_CONTENT_ENCODING,
@@ -84,7 +84,7 @@ pub enum StaticVarName {
     HTTP_COOKIE,
     HTTP_DATE,
     HTTP_DEVICE_MEMORY,
-    /// W3C tracking preference (https://www.w3.org/TR/tracking-dnt/)
+    /// W3C tracking preference (<https://www.w3.org/TR/tracking-dnt/>)
     HTTP_DNT,
     HTTP_DOWNLINK,
     HTTP_DPR,
@@ -120,9 +120,9 @@ pub enum StaticVarName {
     HTTP_SEC_FETCH_SITE,
     HTTP_SEC_FETCH_USER,
     HTTP_SERVICE_WORKER_NAVIGATION_PRELOAD,
-    /// W3C trace context propagation (https://www.w3.org/TR/trace-context/)
+    /// W3C trace context propagation (<https://www.w3.org/TR/trace-context/>)
     HTTP_TRACEPARENT,
-    /// W3C trace context propagation (https://www.w3.org/TR/trace-context/)
+    /// W3C trace context propagation (<https://www.w3.org/TR/trace-context/>)
     HTTP_TRACESTATE,
     HTTP_UPGRADE_INSECURE_REQUESTS,
     HTTP_USER_AGENT,

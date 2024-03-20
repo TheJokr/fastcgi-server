@@ -1,4 +1,4 @@
-doc-valid-idents = ["FastCGI", ".."]
+doc-valid-idents = ["FastCGI", "VarInt", "BeginRequest", "AbortRequest", ".."]
 allow-expect-in-tests = true
 allow-unwrap-in-tests = true
 allow-dbg-in-tests = true

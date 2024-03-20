@@ -46,7 +46,7 @@ impl<T: ?Sized> RepeatableLockFuture<T> {
 // Adapted from https://github.com/laizy/waitgroup-rs
 #[derive(Default)]
 struct WaitGroupInner {
-    /// The task to wake when the last TaskToken is dropped.
+    /// The task to wake when the last `TaskToken` is dropped.
     waker: AtomicWaker,
 }
 
