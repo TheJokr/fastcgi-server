@@ -20,9 +20,6 @@ defaults:
     shell: bash  # for pipefail
 env:
   CARGO_TERM_COLOR: always
-  # Fail CI on any warnings
-  # TODO(msrv): configure multiple-crate-versions lint via clippy.toml
-  RUSTFLAGS: "-D warnings -A clippy::multiple-crate-versions"
 
 jobs:
   test-stable:

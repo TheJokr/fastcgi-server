@@ -3,7 +3,7 @@
 #![warn(keyword_idents, let_underscore_drop, unreachable_pub, unused_import_braces)]
 
 #![deny(clippy::suspicious, clippy::cargo)]
-#![deny(clippy::exit, clippy::semicolon_inside_block, clippy::unwrap_used)]
+#![deny(clippy::exit, clippy::semicolon_inside_block, clippy::unwrap_used, clippy::mixed_read_write_in_expression)]
 #![warn(clippy::pedantic, clippy::multiple_crate_versions)]
 #![allow(clippy::enum_glob_use, clippy::cast_possible_truncation, clippy::items_after_statements)]
 
