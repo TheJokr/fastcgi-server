@@ -12,6 +12,7 @@ categories = ["network-programming", "web-programming"]
 
 [features]
 async = ["dep:futures-util", "dep:async-lock", "dep:event-listener"]
+http = ["dep:http"]
 log = ["tracing/log"]
 trace-more = []
 
