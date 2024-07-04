@@ -14,7 +14,7 @@ type ControlFlow<T> = std::ops::ControlFlow<T, T>;
 type SResult<'a> = (&'a mut [u8], State);
 type PResult<'a> = ControlFlow<SResult<'a>>;
 
-trait WrapState: Sized {
+trait StateBuilder: Sized {
     fn into_state(self) -> State;
     fn wrap_skip(skip: SkipState<Self>) -> State;
     fn wrap_values(vals: GetValuesState<Self>) -> State;
@@ -36,7 +36,7 @@ struct SkipState<T> {
     padding_rem: u8,
 }
 
-impl<T: WrapState> SkipState<T> {
+impl<T: StateBuilder> SkipState<T> {
     fn drive(mut self, data: &mut [u8]) -> PResult<'_> {
         let payload = usize::from(self.payload_rem);
         let (total, overflow) = match payload.checked_add(self.padding_rem.into()) {
@@ -68,7 +68,7 @@ struct GetValuesState<T> {
     padding_rem: u8,
 }
 
-impl<T: WrapState> GetValuesState<T> {
+impl<T: StateBuilder> GetValuesState<T> {
     fn new(next: T, payload_rem: u16, padding_rem: u8) -> Self {
         Self { next, vars: fcgi::ProtocolVariables::empty(), payload_rem, padding_rem }
     }
@@ -208,7 +208,7 @@ impl HeaderState {
     }
 }
 
-impl WrapState for HeaderState {
+impl StateBuilder for HeaderState {
     fn into_state(self) -> State {
         State::Header(self)
     }
@@ -474,7 +474,7 @@ impl ParamsState {
 
 // We only need to pass ParamsStateInner through wrappers, not the entire
 // ParamsState. This reduces the overall size of the State enum.
-impl WrapState for ParamsStateInner {
+impl StateBuilder for ParamsStateInner {
     fn into_state(self) -> State {
         State::Params(ParamsState { inner: self, payload_rem: 0, padding_rem: 0 })
     }
@@ -488,7 +488,7 @@ impl WrapState for ParamsStateInner {
 
 
 // Allow completed Request to consume padding from final Params record
-impl WrapState for Request {
+impl StateBuilder for Request {
     fn into_state(self) -> State {
         State::Done(self)
     }
