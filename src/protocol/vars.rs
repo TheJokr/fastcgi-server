@@ -66,7 +66,7 @@ impl ProtocolVariables {
         for (name, var) in self.iter_names() {
             let value = match var {
                 Self::FCGI_MAX_CONNS | Self::FCGI_MAX_REQS => config.max_conns.to_compact_string(),
-                Self::FCGI_MPXS_CONNS => CompactString::new_inline("0"),
+                Self::FCGI_MPXS_CONNS => CompactString::const_new("0"),
                 _ => unreachable!("All flags should be explicitly handled"),
             };
             // name and value are guaranteed to fit into a VarInt here

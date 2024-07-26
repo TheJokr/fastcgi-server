@@ -234,7 +234,7 @@ impl From<&http::header::HeaderName> for OwnedVarName {
     /// the header to its CGI/1.1 representation.
     fn from(v: &http::header::HeaderName) -> Self {
         let head = v.as_str();
-        let mut var = CompactString::new_inline("HTTP_");
+        let mut var = CompactString::const_new("HTTP_");
         var.reserve(head.len());
 
         // Swap '-' for '_' without allocating
