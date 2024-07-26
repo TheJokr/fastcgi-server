@@ -81,8 +81,11 @@ jobs:
         run: rustup default 1.66
       - uses: Swatinem/rust-cache@v2
 
+      - name: Lock dependencies for MSRV
+        run: |
+          cargo update -p tokio --precise 1.38.1
       - name: Run unit tests
-        run: cargo test --all-features -- --color=always
+        run: cargo test --locked --all-features -- --color=always
 
       - name: Run end-to-end tests
         if: inputs.test-all || github.event_name == 'schedule'
