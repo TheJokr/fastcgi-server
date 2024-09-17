@@ -1,5 +1,5 @@
 // TODO(docs): #![deny(missing_docs)]
-#![deny(unsafe_code, single_use_lifetimes, unused_lifetimes, pointer_structural_match)]
+#![deny(unsafe_code, single_use_lifetimes, unused_lifetimes)]
 #![warn(keyword_idents, let_underscore_drop, unreachable_pub, unused_import_braces)]
 
 #![deny(clippy::suspicious, clippy::cargo)]
