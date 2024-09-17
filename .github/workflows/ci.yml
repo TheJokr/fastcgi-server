@@ -84,6 +84,7 @@ jobs:
       - name: Lock dependencies for MSRV
         run: |
           cargo update -p tokio --precise 1.38.1
+          cargo update -p tokio-util --precise 0.7.11
       - name: Run unit tests
         run: cargo test --locked --all-features -- --color=always
 
