@@ -10,7 +10,7 @@ sudo -n apt-get -qy install --no-install-recommends nginx-core apache2 lighttpd
 echo '::endgroup::'
 
 echo '::group::Build FastCGI examples'
-cargo build --examples --all-features
+cargo build --locked --examples --all-features
 echo -e '::endgroup::\n'
 
 declare -A servers=(

@@ -1,5 +1,6 @@
 # Cargo artifacts
 /target
 
-# Libraries don't lock dependency versions
+# Cargo.lock is specifically designed with minimal/MSRV-compatible versions.
+# Require `git add --force` to change it.
 /Cargo.lock

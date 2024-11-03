@@ -14,6 +14,7 @@ on:
       - 'ci/**'
       - '**.rs'
       - 'Cargo.toml'
+      - 'Cargo.lock'
 
 defaults:
   run:
@@ -31,6 +32,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # Runner's default (stable) rustc is fine
+      - name: Update Cargo.lock to latest compatible dependencies
+        run: cargo generate-lockfile
       - uses: Swatinem/rust-cache@v2
       - name: Install SARIF tools
         run: cargo install clippy-sarif sarif-fmt
@@ -81,10 +84,6 @@ jobs:
         run: rustup default 1.66
       - uses: Swatinem/rust-cache@v2
 
-      - name: Lock dependencies for MSRV
-        run: |
-          cargo update -p tokio --precise 1.38.1
-          cargo update -p tokio-util --precise 0.7.11
       - name: Run unit tests
         run: cargo test --locked --all-features -- --color=always
 
@@ -117,6 +116,7 @@ jobs:
         run: |-
           rustup default ${{ matrix.channel }}
           rustup component add clippy
+          cargo generate-lockfile
 
       - name: Run lints (Clippy)
         id: run-lint
