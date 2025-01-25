@@ -222,7 +222,7 @@ mod tests {
         for len in repeat_with(|| fastrand::u16(..)).take(20) {
             for off in 0..8 {
                 let mut head = RecordHeader::new(RecordType::Stdin, 6893);
-                head.set_lengths(len + off);
+                head.set_lengths(len.wrapping_add(off));
                 let body_len = u32::from(head.content_length) + u32::from(head.padding_length);
                 assert_eq!(body_len % 8, 0, "record body is not 8-byte aligned");
             }
