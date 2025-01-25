@@ -1,5 +1,6 @@
 # fastcgi-server
 [![CI Status](https://github.com/TheJokr/fastcgi-server/actions/workflows/ci.yml/badge.svg)](https://github.com/TheJokr/fastcgi-server/actions/workflows/ci.yml)
+[![Crate MSRV](https://img.shields.io/badge/msrv-1.66-blue)](Cargo.toml)
 [![License](https://img.shields.io/badge/license-Apache--2.0%2FMIT-informational)](#license)
 
 A safe Rust implementation of FastCGI on the server (aka handler/upstream) side.

@@ -3,6 +3,7 @@ name = "fastcgi-server"
 version = "0.1.0"
 license = "Apache-2.0 OR MIT"
 edition = "2021"
+rust-version = "1.66"
 
 authors = ["TheJokr <leo@bloecher.dev>"]
 repository = "https://github.com/TheJokr/fastcgi-server"

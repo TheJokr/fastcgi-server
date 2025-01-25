@@ -861,7 +861,7 @@ mod tests {
             for s in fcgi::RecordType::iter() {
                 if s.is_input_stream() && !role.input_streams().contains(&s) {
                     parser.set_stream(Some(s))
-                        .expect_err("Parser accepted stream {s:?} for {role:?}");
+                        .expect_err(&format!("Parser accepted stream {s:?} for {role:?}"));
                     assert_eq!(parser.active_stream(), cur);
                     assert_eq!(parser.stream_buffer().len(), 100);
                 }
@@ -869,13 +869,14 @@ mod tests {
 
             for next in streams {
                 set_buflen(&mut parser, 100, 0);
-                parser.set_stream(next)
-                    .expect("Parser should accept stream {next:?} for {role:?}");
+                parser.set_stream(next).unwrap_or_else(
+                    |e| panic!("Parser should accept stream {next:?} for {role:?}: {e:?}")
+                );
                 assert_eq!(parser.active_stream(), next);
                 assert_eq!(parser.stream_buffer().len(), 0);
 
                 parser.set_stream(cur)
-                    .expect_err("Parser accepted stream {prev:?} after stream {next:?}");
+                    .expect_err(&format!("Parser accepted stream {cur:?} after stream {next:?}"));
                 assert_eq!(parser.active_stream(), next);
                 cur = next;
             }
