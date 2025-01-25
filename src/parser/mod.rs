@@ -48,8 +48,8 @@ pub enum Error {
     ///
     /// This can only happen in [`request::Parser`].
     #[error(
-        "BeginRequest FastCGI record has invalid length {0}, expected {}",
-        fcgi::body::BeginRequest::LEN
+        "BeginRequest FastCGI record has invalid length {0}, expected {len}",
+        len = fcgi::body::BeginRequest::LEN
     )]
     InvalidRequestLen(u16),
 

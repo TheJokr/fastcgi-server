@@ -41,8 +41,6 @@ impl VarName {
     /// [`VarName`] implements [`From<&T>`] for any `T: AsRef<str>`. This
     /// includes [`StaticVarName`] and [`OwnedVarName`].
     #[ref_cast::ref_cast_custom]
-    // Unsafe code is generated and checked by ref-cast
-    #[allow(unsafe_code, clippy::let_underscore_untyped)]
     #[inline]
     #[must_use]
     pub const fn new(s: &str) -> &Self;
