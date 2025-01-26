@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::iter::repeat_with;
 
 use compact_str::CompactString;
 
@@ -35,6 +34,12 @@ pub(super) fn params_map() -> HashMap<cgi::OwnedVarName, SmallBytes> {
 }
 
 
+pub(super) fn random_bytes(len: usize) -> Vec<u8> {
+    let mut bytes = vec![0; len];
+    fastrand::fill(&mut bytes);
+    bytes
+}
+
 pub(super) fn add_unk(buf: &mut Vec<u8>, req_id: u16, rtype: u8) {
     let rand_len = fastrand::u16(10..512);
     let mut head = [0; 8];
@@ -43,7 +48,7 @@ pub(super) fn add_unk(buf: &mut Vec<u8>, req_id: u16, rtype: u8) {
     head[2..4].copy_from_slice(&req_id.to_be_bytes());
     head[4..6].copy_from_slice(&rand_len.to_be_bytes());
     buf.extend(head);
-    buf.extend(repeat_with(|| fastrand::u8(..)).take(rand_len.into()));
+    buf.extend(random_bytes(rand_len.into()));
 }
 
 /// Uses [`fcgi::Role::Responder`] and full [`fcgi::RequestFlags`].
@@ -115,7 +120,7 @@ pub(super) fn add_input(buf: &mut Vec<u8>, req_id: u16, stream: fcgi::RecordType
     for &amt in lens {
         head.content_length = amt;
         buf.extend(head.to_bytes());
-        buf.extend(repeat_with(|| fastrand::u8(..)).take(amt.into()));
+        buf.extend(random_bytes(amt.into()));
     }
 
     // Add the stream end header
@@ -134,7 +139,7 @@ pub(super) fn randomize_padding(buf: &mut Vec<u8>) {
         head_start += 8 + usize::from(payload);
         buf.splice(
             head_start..(head_start + usize::from(old_pad)),
-            repeat_with(|| fastrand::u8(..)).take(new_pad.into()),
+            random_bytes(new_pad.into()),
         );
         head_start += usize::from(new_pad);
     }

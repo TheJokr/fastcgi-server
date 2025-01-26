@@ -888,13 +888,13 @@ mod tests {
         const REQ_ID: u16 = 0x0d44;
         let config = Config::with_conns(1.try_into().unwrap());
         let mut parser = make_parser(&config, REQ_ID, fcgi::Role::Responder);
-        parser.buffer.iter_mut().for_each(|b| *b = fastrand::u8(..));
+        fastrand::fill(&mut parser.buffer);
 
         parser.parsed_start = 10;
         parser.gap_start = 210;
         parser.raw_start = 495;
         parser.free_start = 500;
-        parser.output.resize_with(80, || fastrand::u8(..));
+        parser.output = test_support::random_bytes(80);
         parser.output_start = 30;
         debug_assert_invars!(parser);
         let free_len = parser.input_buffer().len();

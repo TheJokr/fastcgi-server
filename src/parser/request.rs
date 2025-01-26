@@ -719,7 +719,6 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use std::io::prelude::*;
-    use std::iter::repeat_with;
     use super::super::test_support;
     use super::*;
 
@@ -975,7 +974,7 @@ mod tests {
         let mut inp = Vec::with_capacity(8192);
         test_support::add_begin(&mut inp, 0xa9e6);
         inp.push(0xc5);
-        inp.extend(repeat_with(|| fastrand::u8(..)).take(512));
+        inp.extend(test_support::random_bytes(512));
         let (res, out) = run_parser(Parser::new(&config), &inp);
         assert_eq!(out, b"");
         assert!(matches!(res, Err(Error::UnknownVersion(0xc5))));

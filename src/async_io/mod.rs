@@ -778,7 +778,6 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use std::future::Future;
-    use std::iter::repeat_with;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::task::Wake;
     use super::*;
@@ -831,7 +830,9 @@ mod tests {
         let waker = counter.clone().into();
         let mut cx = Context::from_waker(&waker);
 
-        let bytes: Vec<_> = repeat_with(|| fastrand::u8(..)).take(256).collect();
+        let mut bytes = [0; 256];
+        fastrand::fill(&mut bytes);
+
         let mut main = make_writer(fcgi::RecordType::Stdout);
         let mut err = main.clone();
         err.head.rtype = fcgi::RecordType::Stderr;
