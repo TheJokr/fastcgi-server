@@ -19,7 +19,7 @@ jobs:
       contents: read
       checks: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Check with the latest compatible dependencies
         run: cargo generate-lockfile
       - uses: rustsec/audit-check@v2
