@@ -260,7 +260,7 @@ impl<'a, R, W> Request<'a, R, W> {
 
     /// Returns an iterator over all environment variables of this request.
     #[inline]
-    pub fn env_iter(&self) -> EnvIter {
+    pub fn env_iter(&self) -> EnvIter<'_> {
         self.parser.request.env_iter()
     }
 

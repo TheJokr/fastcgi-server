@@ -172,7 +172,7 @@ impl HeaderState {
                 let skip = self.into_skip(head.content_length, head.padding_length);
                 return Continue((&mut data[fcgi::RecordHeader::LEN..], skip));
             },
-        };
+        }
 
         if fcgi::body::BeginRequest::LEN != head.content_length.into() {
             fatal!(data, Error::InvalidRequestLen(head.content_length));
@@ -652,7 +652,7 @@ impl<'a> Parser<'a> {
     /// # Panics
     /// `new_input` must not exceed the length of the slice returned by
     /// `Parser::input_buffer`, otherwise an assertion panics.
-    pub fn parse(&mut self, new_input: usize) -> Yield {
+    pub fn parse(&mut self, new_input: usize) -> Yield<'_> {
         assert!(new_input <= self.input.len() - self.input_len);
         self.input_len += new_input;
         self.output.clear();

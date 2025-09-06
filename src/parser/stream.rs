@@ -383,7 +383,6 @@ impl<'a> Parser<'a> {
         Ok(res)
     }
 
-    #[must_use]
     fn parse_payload(&mut self, res: &mut Status, dest: &mut Option<&mut [u8]>) -> ControlFlow {
         let raw_len = self.free_start - self.raw_start;
         let payload_len = min(usize::from(self.payload_rem), raw_len);
@@ -442,7 +441,7 @@ impl<'a> Parser<'a> {
         let past_head = self.raw_start + fcgi::RecordHeader::LEN;
         if past_head > self.free_start {
             return Ok(Break(()));
-        };
+        }
         let head = self.buffer[self.raw_start..past_head].try_into()
             .expect("slice should be same length as array");
 
