@@ -18,12 +18,18 @@ declare -A servers=(
     [apache2]="apache2 -d ci -f apache2.conf -D FOREGROUND"
     [lighttpd]="lighttpd -f ci/lighttpd.conf -D"
 )
+
 for srv in "${!servers[@]}"; do
     echo "::group::Test with ${srv}"
     RUST_LOG=trace target/debug/examples/hello-cgi 2> "e2e-logs/hello-cgi-${srv}.log" &
     fcgi_pid="$!"
 
     ${servers["$srv"]} 2> "e2e-logs/${srv}.log" &
+    until curl -sSI 'http://localhost:8080/' > /dev/null; do
+        echo "Waiting for ${srv} to listen..."
+        sleep 0.5s
+    done
+
     newman run ci/e2e.postman_collection --env-var 'base_url=localhost:8080' \
         --color on --timeout 600000
 
