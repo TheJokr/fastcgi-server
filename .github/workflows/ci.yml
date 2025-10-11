@@ -42,7 +42,7 @@ jobs:
         id: run-lint
         run: cargo clippy --all-targets --all-features --message-format json |
           clippy-sarif | tee clippy.sarif | sarif-fmt --color always
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@v4
         if: "!cancelled() && steps.run-lint.conclusion != 'skipped'"
         with:
           sarif_file: clippy.sarif
